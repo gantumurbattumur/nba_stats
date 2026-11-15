@@ -208,3 +208,21 @@ def backtest_cmd(
                             aggfunc="first")
         typer.echo(t.to_string(float_format=lambda v: f"{v:.4f}"))
     typer.echo(f"\nbest model (lowest mean test log_loss): {backtest.best_model(conn)}")
+
+
+@app.command()
+def odds(closing: Annotated[bool, typer.Option(help="mark this pull as the closing line (~30 min before tip)")] = False) -> None:
+    """Pull today's live odds from The Odds API (3 credits)."""
+    from nba_predict.data.odds_client import OddsApiClient, OddsApiError
+
+    conn = _conn()
+    try:
+        n = ingest_mod.ingest_odds(conn, OddsApiClient(get_settings().odds_api_key), closing=closing)
+    except OddsApiError as e:
+        typer.echo(f"odds: {e}", err=True)
+        raise typer.Exit(1)
+    u = conn.execute("select at, credits_used, credits_remaining from api_usage order by id desc limit 1").fetchone()
+    games = conn.execute("select count(distinct game_id) from odds_snapshots where source='oddsapi' and pulled_at=?",
+                         (u["at"],)).fetchone()[0]
+    typer.echo(f"odds: {n} snapshots for {games} games; credits used {u['credits_used']}, "
+               f"remaining {u['credits_remaining']}")

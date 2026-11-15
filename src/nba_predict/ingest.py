@@ -245,3 +245,47 @@ def coverage(conn: sqlite3.Connection) -> pd.DataFrame:
         """,
         conn,
     )
+
+
+def ingest_odds(conn: sqlite3.Connection, client, closing: bool = False) -> int:
+    """One Odds API pull → ``odds_snapshots`` (source 'oddsapi', shared ``pulled_at``) plus an
+    ``api_usage`` row. Events match ``games`` by the **Eastern** date of ``commence_time`` and
+    the home team; unmapped team names / unmatched games are logged and skipped. Returns
+    snapshots written."""
+    from zoneinfo import ZoneInfo
+
+    from nba_predict.data.odds_client import parse_events
+    from nba_predict.teams import by_odds_name
+
+    events, usage = client.nba_odds()
+    pulled_at = dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    et = ZoneInfo("America/New_York")
+    snaps = []
+    warned: set[str] = set()
+    for r in parse_events(events):
+        home, away = by_odds_name(r["home_name"]), by_odds_name(r["away_name"])
+        if home is None or away is None:
+            if r["event_id"] not in warned:
+                log.warning("Odds API event %s: unmapped team name(s) %r / %r; skipped",
+                            r["event_id"], r["home_name"], r["away_name"])
+                warned.add(r["event_id"])
+            continue
+        tip = dt.datetime.fromisoformat(r["commence_time"].replace("Z", "+00:00"))
+        gdate = tip.astimezone(et).date().isoformat()
+        g = conn.execute("select game_id from games where game_date = ? and home_team_id = ?",
+                         (gdate, home.nba_id)).fetchone()
+        if g is None:
+            if r["event_id"] not in warned:
+                log.warning("Odds API event %s (%s @ %s, %s ET): no game in DB; run `nba slate`",
+                            r["event_id"], away.abbr, home.abbr, gdate)
+                warned.add(r["event_id"])
+            continue
+        snaps.append(dict(game_id=g[0], source="oddsapi", book=r["book"], pulled_at=pulled_at,
+                          is_closing=int(closing),
+                          **{k: r[k] for k in ("home_ml", "away_ml", "home_spread", "home_spread_price",
+                                               "away_spread_price", "total", "over_price", "under_price")}))
+    n = upsert(conn, "odds_snapshots", snaps, ["game_id", "source", "book", "pulled_at"])
+    conn.execute("insert into api_usage (at, source, credits_used, credits_remaining) values (?, ?, ?, ?)",
+                 (pulled_at, "oddsapi", usage.get("last"), usage.get("remaining")))
+    conn.commit()
+    return n

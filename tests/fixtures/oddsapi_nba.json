@@ -1,0 +1,297 @@
+[
+ {
+  "id": "e1bos",
+  "sport_key": "basketball_nba",
+  "sport_title": "NBA",
+  "commence_time": "2026-11-15T23:00:00Z",
+  "home_team": "Boston Celtics",
+  "away_team": "Dallas Mavericks",
+  "bookmakers": [
+   {
+    "key": "draftkings",
+    "title": "DraftKings",
+    "last_update": "2026-11-15T15:02:11Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Boston Celtics",
+        "price": -180
+       },
+       {
+        "name": "Dallas Mavericks",
+        "price": 155
+       }
+      ]
+     },
+     {
+      "key": "spreads",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Boston Celtics",
+        "price": -110,
+        "point": -4.5
+       },
+       {
+        "name": "Dallas Mavericks",
+        "price": -110,
+        "point": 4.5
+       }
+      ]
+     },
+     {
+      "key": "totals",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Over",
+        "price": -110,
+        "point": 224.5
+       },
+       {
+        "name": "Under",
+        "price": -110,
+        "point": 224.5
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "fanduel",
+    "title": "FanDuel",
+    "last_update": "2026-11-15T15:02:11Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Boston Celtics",
+        "price": -175
+       },
+       {
+        "name": "Dallas Mavericks",
+        "price": 150
+       }
+      ]
+     },
+     {
+      "key": "spreads",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Boston Celtics",
+        "price": -112,
+        "point": -4.0
+       },
+       {
+        "name": "Dallas Mavericks",
+        "price": -108,
+        "point": 4.0
+       }
+      ]
+     },
+     {
+      "key": "totals",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Over",
+        "price": -108,
+        "point": 225.5
+       },
+       {
+        "name": "Under",
+        "price": -112,
+        "point": 225.5
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e2sac",
+  "sport_key": "basketball_nba",
+  "sport_title": "NBA",
+  "commence_time": "2026-11-16T03:30:00Z",
+  "home_team": "Sacramento Kings",
+  "away_team": "Oklahoma City Thunder",
+  "bookmakers": [
+   {
+    "key": "draftkings",
+    "title": "DraftKings",
+    "last_update": "2026-11-15T15:02:11Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Sacramento Kings",
+        "price": 270
+       },
+       {
+        "name": "Oklahoma City Thunder",
+        "price": -340
+       }
+      ]
+     },
+     {
+      "key": "spreads",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Sacramento Kings",
+        "price": -108,
+        "point": 7.5
+       },
+       {
+        "name": "Oklahoma City Thunder",
+        "price": -112,
+        "point": -7.5
+       }
+      ]
+     },
+     {
+      "key": "totals",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Over",
+        "price": -110,
+        "point": 229.0
+       },
+       {
+        "name": "Under",
+        "price": -110,
+        "point": 229.0
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "fanduel",
+    "title": "FanDuel",
+    "last_update": "2026-11-15T15:02:11Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Sacramento Kings",
+        "price": 265
+       },
+       {
+        "name": "Oklahoma City Thunder",
+        "price": -330
+       }
+      ]
+     },
+     {
+      "key": "spreads",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Sacramento Kings",
+        "price": -110,
+        "point": 7.0
+       },
+       {
+        "name": "Oklahoma City Thunder",
+        "price": -110,
+        "point": -7.0
+       }
+      ]
+     },
+     {
+      "key": "totals",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Over",
+        "price": -110,
+        "point": 228.5
+       },
+       {
+        "name": "Under",
+        "price": -110,
+        "point": 228.5
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e3sea",
+  "sport_key": "basketball_nba",
+  "sport_title": "NBA",
+  "commence_time": "2026-11-16T03:00:00Z",
+  "home_team": "Seattle SuperSonics",
+  "away_team": "Portland Trail Blazers",
+  "bookmakers": [
+   {
+    "key": "draftkings",
+    "title": "DraftKings",
+    "last_update": "2026-11-15T15:02:11Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Seattle SuperSonics",
+        "price": -120
+       },
+       {
+        "name": "Portland Trail Blazers",
+        "price": 100
+       }
+      ]
+     },
+     {
+      "key": "spreads",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Seattle SuperSonics",
+        "price": -110,
+        "point": -1.5
+       },
+       {
+        "name": "Portland Trail Blazers",
+        "price": -110,
+        "point": 1.5
+       }
+      ]
+     },
+     {
+      "key": "totals",
+      "last_update": "2026-11-15T15:02:11Z",
+      "outcomes": [
+       {
+        "name": "Over",
+        "price": -110,
+        "point": 230.5
+       },
+       {
+        "name": "Under",
+        "price": -110,
+        "point": 230.5
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]
