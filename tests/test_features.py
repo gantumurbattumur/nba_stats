@@ -136,3 +136,27 @@ def test_profile_honors_filter(enriched):
     assert n > 0 and p["gp"] == min(n, 10)
     sub = apply_filter(prior, FilterSpec(opp_min_win_pct=0.5)).sort_values("game_date").tail(10)
     assert p["pts"] == pytest.approx(sub.pts.mean()) if "pts" in p else True
+
+
+def test_bad_team_minutes_do_not_reach_pace_anywhere(fixture_db):
+    # 0022600231-style glitch: one team's MIN = 168 while the opponent has 240
+    base = build_feature_table(fixture_db)
+    gid = "0022400004"
+    fixture_db.execute("update team_games set min = 168 where game_id = ? and is_home = 0", (gid,))
+    fixture_db.commit()
+    e = build_enriched(fixture_db)
+    assert (e[e.game_id == gid].game_min == 240).all()
+    after = build_feature_table(fixture_db)
+    pace_cols = [c for c in base.columns if c.endswith("_pace")]
+    pd.testing.assert_frame_equal(base[pace_cols], after[pace_cols])
+    row = e[e.game_id == gid].iloc[0]
+    p = team_profile(e, row.team_abbr, date(2024, 12, 1), None, "all")
+    p0 = team_profile(build_enriched_without_glitch(fixture_db, gid), row.team_abbr,
+                      date(2024, 12, 1), None, "all")
+    assert p["pace"] == pytest.approx(p0["pace"])
+
+
+def build_enriched_without_glitch(conn, gid):
+    conn.execute("update team_games set min = 240 where game_id = ?", (gid,))
+    conn.commit()
+    return build_enriched(conn)
