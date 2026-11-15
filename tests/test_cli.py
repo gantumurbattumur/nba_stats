@@ -138,3 +138,18 @@ def test_backtest_command(cli_db):
     assert r.exit_code == 0, r.output
     assert "== 2025-26 (test) ==" in r.output and "log_loss" in r.output and "best model" in r.output
     assert "by segment" in r.output
+
+
+def test_coverage_ignores_open_lines(conn):
+    from nba_predict.db import upsert
+    from nba_predict.ingest import coverage
+
+    upsert(conn, "games", [dict(game_id="a", season="2025-26", game_date="2025-11-01", home_team_id=1,
+                                away_team_id=2, status="final", home_pts=1, away_pts=0)], ["game_id"])
+    snap = dict(game_id="a", source="espn", book="ESPN BET")
+    upsert(conn, "odds_snapshots", [
+        {**snap, "pulled_at": "2025-11-01T23:59:59Z", "is_closing": 1, "home_spread": -2.5, "home_ml": -140, "away_ml": 120},
+        {**snap, "pulled_at": "2025-11-01T12:00:00Z", "is_closing": 0, "home_spread": 1.5, "home_ml": 105, "away_ml": -125},
+    ], ["game_id", "source", "book", "pulled_at"])
+    r = coverage(conn).iloc[0]
+    assert (r.espn_lines, r.fav_disagree) == (1, 0)

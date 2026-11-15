@@ -280,7 +280,7 @@ def coverage(conn: sqlite3.Connection) -> pd.DataFrame:
         from games g
         left join (select game_id, max(home_spread) as home_spread, max(home_ml) as home_ml,
                           max(away_ml) as away_ml
-                   from odds_snapshots where source = 'espn' group by game_id) e
+                   from odds_snapshots where source = 'espn' and is_closing = 1 group by game_id) e
                on e.game_id = g.game_id
         group by g.season, g.season_type
         order by g.season, g.season_type
