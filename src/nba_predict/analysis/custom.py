@@ -6,6 +6,7 @@ Expressions only ever run through ``db.readonly_query`` (read-only connection + 
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 import sqlite3
 from pathlib import Path
@@ -15,6 +16,38 @@ import pandas as pd
 from nba_predict.db import QueryError, readonly_query
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
+log = logging.getLogger(__name__)
+
+
+def check_expression(expr: str) -> None:
+    """Reject expressions that could leave the ``(...)`` they are wrapped in: a ``)`` that
+    closes past depth 0, unbalanced parens, ``;`` or a comment (``--``, ``/*``) outside string
+    literals / quoted identifiers. Raises ``QueryError``."""
+    if not isinstance(expr, str) or not expr.strip():
+        raise QueryError("empty expression")
+    depth, i, n = 0, 0, len(expr)
+    closers = {"'": "'", '"': '"', "`": "`", "[": "]"}
+    while i < n:
+        ch = expr[i]
+        if ch in closers:
+            j = expr.find(closers[ch], i + 1)
+            while j != -1 and ch != "[" and j + 1 < n and expr[j + 1] == ch:  # '' / "" escapes
+                j = expr.find(closers[ch], j + 2)
+            if j == -1:
+                raise QueryError("unterminated quote in expression")
+            i = j + 1
+            continue
+        if ch == ";" or expr.startswith(("--", "/*"), i):
+            raise QueryError("';' and SQL comments are not allowed in a feature expression")
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                raise QueryError("unbalanced ')' in expression")
+        i += 1
+    if depth != 0:
+        raise QueryError("unbalanced '(' in expression")
 
 
 def _db_path(conn: sqlite3.Connection) -> str:
@@ -30,6 +63,7 @@ def add_feature(conn: sqlite3.Connection, name: str, expression: str, use_in_mod
         raise ValueError(f"feature name must match {NAME_RE.pattern}: {name!r}")
     if name in _feature_columns(conn):
         raise ValueError(f"{name!r} collides with a game_features column")
+    check_expression(expression)
     # validation run; QueryError propagates (bad column, multiple statements, writes, ...)
     readonly_query(_db_path(conn), f"SELECT game_id, ({expression}) AS v FROM game_features LIMIT 5")
     conn.execute(
@@ -70,11 +104,25 @@ def evaluate(db_path: str | Path, names: list[str] | None = None, only_model: bo
     defs = _defs(db_path, names, only_model)
     if not defs:
         return readonly_query(db_path, "select game_id from game_features", max_rows=None)
-    for n, _ in defs:  # names are validated on insert; re-check before interpolating
+    for n, expr in defs:  # validated on insert; re-check before interpolating
         if not NAME_RE.match(n):
             raise QueryError(f"invalid stored feature name {n!r}")
+        check_expression(expr)
     cols = ", ".join(f'({expr}) AS "{n}"' for n, expr in defs)
-    return readonly_query(db_path, f"SELECT game_id, {cols} FROM game_features", max_rows=None)
+    try:
+        return readonly_query(db_path, f"SELECT game_id, {cols} FROM game_features", max_rows=None)
+    except QueryError:
+        pass  # one stale/broken feature (e.g. a dropped window column): evaluate one by one
+    out = readonly_query(db_path, "select game_id from game_features", max_rows=None)
+    for n, expr in defs:
+        try:
+            v = readonly_query(db_path, f'SELECT game_id, ({expr}) AS "{n}" FROM game_features',
+                               max_rows=None)
+        except QueryError as e:
+            log.warning("custom feature %r skipped: %s", n, e)
+            continue
+        out = out.merge(v, on="game_id", how="left")
+    return out
 
 
 def with_custom(features_df: pd.DataFrame, db_path: str | Path, only_model: bool = False) -> pd.DataFrame:

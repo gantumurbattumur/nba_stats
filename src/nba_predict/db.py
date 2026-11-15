@@ -238,10 +238,19 @@ def _ro_authorizer(action, arg1, arg2, _db, _trigger):
     return sqlite3.SQLITE_DENY
 
 
+MAX_VALUE_BYTES = 10_000_000  # per string/blob value (SQLITE_LIMIT_LENGTH)
+
+
+def _row_bytes(row) -> int:
+    return sum(len(v) if isinstance(v, (str, bytes)) else 8 for v in row)
+
+
 def readonly_query(db_path: str | Path, sql: str, params=(), max_rows: int | None = 50_000,
-                   timeout_s: float = 30.0) -> pd.DataFrame:
+                   timeout_s: float = 30.0, max_bytes: int | None = 256_000_000) -> pd.DataFrame:
     """Run one user-supplied SELECT through a read-only connection (``mode=ro`` + authorizer
     allowing only SELECT/READ/FUNCTION/RECURSIVE). Raises ``QueryError`` on anything else.
+    Resource guards: ``timeout_s`` wall clock, ``MAX_VALUE_BYTES`` per value (``randomblob``,
+    ``zeroblob``, ``printf`` padding) and ``max_bytes`` for the whole result.
     ``df.attrs["truncated"]`` tells whether more than ``max_rows`` rows existed."""
     import time
 
@@ -255,13 +264,26 @@ def readonly_query(db_path: str | Path, sql: str, params=(), max_rows: int | Non
         raise QueryError(f"cannot open database read-only: {e}") from e
     try:
         conn.set_authorizer(_ro_authorizer)
+        conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_BYTES)
         deadline = time.monotonic() + timeout_s
         conn.set_progress_handler(lambda: int(time.monotonic() > deadline), 10_000)
         try:
             cur = conn.execute(stmt, params)
             cols = [d[0] for d in cur.description or []]
-            rows = cur.fetchall() if max_rows is None else cur.fetchmany(max_rows + 1)
-        except (sqlite3.Error, sqlite3.Warning, ValueError) as e:
+            want = None if max_rows is None else max_rows + 1
+            rows: list = []
+            size = 0
+            while want is None or len(rows) < want:
+                chunk = cur.fetchmany(1000 if want is None else min(1000, want - len(rows)))
+                if not chunk:
+                    break
+                rows.extend(chunk)
+                if max_bytes is not None:
+                    size += sum(_row_bytes(r) for r in chunk)
+                    if size > max_bytes:
+                        raise QueryError(f"result too large (> {max_bytes:,} bytes); "
+                                         "select fewer rows or columns")
+        except (sqlite3.Error, sqlite3.Warning, ValueError, OverflowError) as e:
             # sqlite3.ProgrammingError "You can only execute one statement at a time." lands here
             raise QueryError(str(e)) from e
     finally:
