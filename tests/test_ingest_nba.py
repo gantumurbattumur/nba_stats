@@ -126,3 +126,92 @@ def test_ingest_season_resolves_neutral_site_via_slate(conn, fake_client):
     assert ingest_season(conn, fake_client, "2025-26") == 6
     row = conn.execute("select home_team_id from games where game_id='0022500002'").fetchone()
     assert row[0] == 1610612743
+
+
+def test_reingest_keeps_espn_event_id(conn, fake_client):
+    ingest_season(conn, fake_client, "2025-26")
+    conn.execute("update games set espn_event_id='401' where game_id='0022500001'")
+    conn.commit()
+    ingest_season(conn, fake_client, "2025-26")
+    fake_client.slate_rows = [dict(game_id="0022500001", game_date="2025-10-21",
+                                   home_team_id=1610612738, away_team_id=1610612752, status="final")]
+    ingest_slate(conn, fake_client, date(2025, 10, 21))
+    r = conn.execute("select status, espn_event_id from games where game_id='0022500001'").fetchone()
+    assert tuple(r) == ("final", "401")
+
+
+def test_slate_final_before_log_then_season_promotes(conn, fake_client):
+    # scoreboard says final but the box score isn't in the log yet → scheduled (no scores);
+    # the next ingest_season run promotes it to final with scores
+    fake_client.slate_rows = [dict(game_id="0022500003", game_date="2025-11-01",
+                                   home_team_id=1610612752, away_team_id=1610612747, status="final")]
+    ingest_slate(conn, fake_client, date(2025, 11, 1))
+    r = conn.execute("select status, home_pts from games where game_id='0022500003'").fetchone()
+    assert tuple(r) == ("scheduled", None)
+    ingest_season(conn, fake_client, "2025-26")
+    r = conn.execute("select status, home_pts from games where game_id='0022500003'").fetchone()
+    assert tuple(r) == ("final", 116)
+
+
+def test_slate_postponed_then_rescheduled(conn, fake_client):
+    base = dict(game_id="0022500050", home_team_id=1610612738, away_team_id=1610612743)
+    fake_client.slate_rows = [dict(base, game_date="2025-12-01", status="postponed")]
+    ingest_slate(conn, fake_client, date(2025, 12, 1))
+    fake_client.slate_rows = [dict(base, game_date="2026-01-15", status="scheduled")]
+    ingest_slate(conn, fake_client, date(2026, 1, 15))
+    r = conn.execute("select season, game_date, status from games where game_id='0022500050'").fetchone()
+    assert tuple(r) == ("2025-26", "2026-01-15", "scheduled")
+
+
+def test_parse_skips_in_progress_game(sample_logs):
+    logs = sample_logs.copy()
+    logs.loc[logs.GAME_ID == "0022500002", "WL"] = None
+    games, tgs = parse_team_logs(logs, "2025-26")
+    assert "0022500002" not in {g["game_id"] for g in games} and len(tgs) == 4
+
+
+def test_status_mapping():
+    from nba_predict.data.nba_client import _status
+    assert _status(3, "Final") == "final"
+    assert _status(3, "Final/OT") == "final"
+    assert _status(1, "7:30 pm ET") == "scheduled"
+    assert _status(2, "Q3 5:12") == "scheduled"
+    assert _status(1, "PPD") == "postponed" and _status(1, "Postponed") == "postponed"
+
+
+def test_live_slate_falls_back_when_board_is_stale(monkeypatch):
+    # before the live board rolls over (late morning ET) it still shows yesterday
+    monkeypatch.setattr(nba_client.time, "sleep", lambda s: None)
+    monkeypatch.setattr(nba_client, "today_et", lambda: date(2026, 11, 15))
+
+    class Board:
+        def __init__(self, *a, **k): pass
+        def get_dict(self):
+            return {"scoreboard": {"gameDate": "2026-11-14", "games": [
+                {"gameId": "old", "homeTeam": {"teamId": 1}, "awayTeam": {"teamId": 2},
+                 "gameStatus": 3, "gameStatusText": "Final"}]}}
+
+    monkeypatch.setattr(nba_client.scoreboard, "ScoreBoard", Board)
+    v2 = [dict(game_id="new", game_date="2026-11-15", home_team_id=1, away_team_id=2,
+               status="scheduled")]
+    monkeypatch.setattr(NbaClient, "_v2_slate", lambda self, d: v2)
+    assert NbaClient(delay_s=0).slate(date(2026, 11, 15)) == v2
+
+
+def test_live_slate_used_for_today(monkeypatch):
+    monkeypatch.setattr(nba_client.time, "sleep", lambda s: None)
+    monkeypatch.setattr(nba_client, "today_et", lambda: date(2026, 11, 15))
+
+    class Board:
+        def __init__(self, *a, **k): pass
+        def get_dict(self):
+            return {"scoreboard": {"gameDate": "2026-11-15", "games": [
+                {"gameId": "0022600240", "homeTeam": {"teamId": 1610612738},
+                 "awayTeam": {"teamId": 1610612742}, "gameStatus": 1,
+                 "gameStatusText": "7:30 pm ET"}]}}
+
+    monkeypatch.setattr(nba_client.scoreboard, "ScoreBoard", Board)
+    monkeypatch.setattr(NbaClient, "_v2_slate", lambda self, d: pytest.fail("V2 not expected"))
+    assert NbaClient(delay_s=0).slate(date(2026, 11, 15)) == [dict(
+        game_id="0022600240", game_date="2026-11-15", home_team_id=1610612738,
+        away_team_id=1610612742, status="scheduled")]
