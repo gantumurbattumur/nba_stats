@@ -123,3 +123,92 @@ def pick_flags(evals: list[dict], threshold: float) -> list[dict]:
         if e["edge"] >= threshold and (e["market"] not in best or e["edge"] > best[e["market"]]["edge"]):
             best[e["market"]] = e
     return list(best.values())
+
+
+# --- logging and grading value flags (Task 13) -------------------------------------------------
+
+def flag_values(conn: sqlite3.Connection, date, model: str | None = None):
+    """Record model-vs-market disagreements for ``date``'s games: for each market, the side with the
+    higher edge if ``edge >= edge_threshold``. Re-running replaces that game's *unsettled* flags
+    (so both sides of a market are never flagged); settled flags are never touched. Games without
+    any snapshot are skipped. ``model`` defaults to ``backtest.best_model``."""
+    import datetime as dt
+    import json
+
+    import pandas as pd
+
+    from nba_predict.backtest import best_model
+    from nba_predict.config import get_settings
+    from nba_predict.db import upsert
+
+    model = model or best_model(conn)
+    thr = get_settings().edge_threshold
+    rows = conn.execute(
+        "select p.game_id, p.home_win_prob, p.pred_margin, p.pred_total, p.params_json from predictions p "
+        "join games g using (game_id) where g.game_date = ? and p.model = ? and g.status = 'scheduled'",
+        (date.isoformat(), model)).fetchall()
+    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    written = []
+    for r in rows:
+        mv = market_view(conn, r["game_id"])
+        if mv is None:
+            continue
+        pj = json.loads(r["params_json"] or "{}")
+        sigma = pj.get("sigma") or 12.5
+        sigma_t = pj.get("sigma_total") or 18.0
+        pred = dict(home_win_prob=r["home_win_prob"], pred_margin=r["pred_margin"], pred_total=r["pred_total"])
+        flags = pick_flags(evaluate_markets(pred, mv, sigma, sigma_t), thr)
+        conn.execute("delete from value_flags where game_id = ? and result is null", (r["game_id"],))
+        recs = [dict(game_id=r["game_id"], created_at=now, model=model, **fl) for fl in flags]
+        if recs:
+            upsert(conn, "value_flags", recs, ["game_id", "market", "side"])
+        conn.commit()
+        written += recs
+    return pd.DataFrame(written, columns=["game_id", "created_at", "model", "market", "side", "line", "price",
+                                          "book", "model_prob", "market_prob", "edge"])
+
+
+def _clv(flag: dict, close: dict) -> tuple[float | None, int | None, float | None]:
+    """(closing_line, closing_price, clv) from the side's perspective. ML: closing no-vig prob of
+    the side − implied prob of the taken price. Spread/total: line points gained vs the close."""
+    from nba_predict.odds_math import american_to_prob
+
+    i = 0 if flag["side"] in ("home", "over") else 1
+    m = flag["market"]
+    if m == "ml" and close.get("ml_novig"):
+        price = (close.get("ml_price") or (None, None))[i]
+        clv = close["ml_novig"][i] - american_to_prob(flag["price"]) if flag["price"] else None
+        return None, price, clv
+    if m == "spread" and close.get("home_spread") is not None:
+        cl = close["home_spread"] if i == 0 else -close["home_spread"]
+        return cl, (close.get("spread_price") or (None, None))[i], float(flag["line"]) - cl
+    if m == "total" and close.get("total") is not None:
+        cl = close["total"]
+        gain = cl - float(flag["line"]) if i == 0 else float(flag["line"]) - cl
+        return cl, (close.get("total_price") or (None, None))[i], gain
+    return None, None, None
+
+
+def grade(conn: sqlite3.Connection, date=None) -> int:
+    """Settle unsettled flags whose game is final (others are skipped): result, ``units`` (the
+    return of a hypothetical 1 unit, evaluation only) and closing line/price/CLV from the latest
+    closing Odds API snapshot, else ESPN. Returns flags settled."""
+    from nba_predict.odds_math import unit_return
+
+    sql = ("select f.*, g.home_pts, g.away_pts from value_flags f join games g using (game_id) "
+           "where f.result is null and g.status = 'final' and g.home_pts is not null")
+    params: tuple = ()
+    if date is not None:
+        sql += " and g.game_date = ?"
+        params = (date.isoformat(),)
+    n = 0
+    for r in [dict(x) for x in conn.execute(sql, params)]:
+        res = settle(r["market"], r["side"], r["line"], r["home_pts"], r["away_pts"])
+        units = unit_return(r["price"], res) if r["price"] is not None else None
+        close = market_view(conn, r["game_id"], closing_only=True) or {}
+        cl, cp, clv = _clv(r, close)
+        conn.execute("update value_flags set result = ?, units = ?, closing_line = ?, closing_price = ?, "
+                     "clv = ? where id = ?", (res, units, cl, cp, clv, r["id"]))
+        n += 1
+    conn.commit()
+    return n

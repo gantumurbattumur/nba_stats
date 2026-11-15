@@ -226,3 +226,140 @@ def odds(closing: Annotated[bool, typer.Option(help="mark this pull as the closi
                          (u["at"],)).fetchone()[0]
     typer.echo(f"odds: {n} snapshots for {games} games; credits used {u['credits_used']}, "
                f"remaining {u['credits_remaining']}")
+
+
+def _today_or(date: str | None) -> dt.date:
+    return _parse_date(date, today_et())
+
+
+@app.command()
+def predict(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), default today")] = None) -> None:
+    """Fit elo/window/ml on games before the date and write predictions for that date's games."""
+    from nba_predict.predict import predict_date
+
+    d = _today_or(date)
+    out = predict_date(_conn(), d)
+    typer.echo(f"{d}: {out.game_id.nunique()} games x {out.model.nunique()} models predicted")
+    if not out.empty:
+        typer.echo(out.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+
+
+@app.command("flags")
+def flags_cmd(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), default today")] = None,
+              model: Annotated[str | None, typer.Option(help="default: best backtest model")] = None) -> None:
+    """Record model-vs-market disagreements (edge >= edge_threshold) for the date's games."""
+    from nba_predict.flags import flag_values
+
+    d = _today_or(date)
+    out = flag_values(_conn(), d, model)
+    typer.echo(f"{d}: {len(out)} value flags (analysis only)")
+    if not out.empty:
+        typer.echo(out.drop(columns=["created_at"]).to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+
+
+@app.command("grade")
+def grade_cmd(date: Annotated[str | None, typer.Option(help="only this date; default all unsettled")] = None) -> None:
+    """Settle flags of finished games (result, 1-unit return for evaluation, closing line value)."""
+    from nba_predict.flags import grade
+
+    n = grade(_conn(), dt.date.fromisoformat(date) if date else None)
+    typer.echo(f"graded {n} flags")
+
+
+def _daily_table(conn, d: dt.date, model: str) -> str:
+    import pandas as pd
+
+    from nba_predict.flags import market_view
+    from nba_predict.teams import by_nba_id
+
+    rows = conn.execute(
+        "select g.game_id, g.home_team_id, g.away_team_id, p.home_win_prob, p.pred_margin, p.pred_total, "
+        "p.params_json from games g left join predictions p on p.game_id = g.game_id and p.model = ? "
+        "where g.game_date = ? and g.status != 'postponed' order by g.game_id", (model, d.isoformat())).fetchall()
+    feats = {r["game_id"]: r for r in conn.execute(
+        "select game_id, h_b2b, a_b2b, h_rest, a_rest, h_gp_szn, a_gp_szn from game_features where game_date = ?",
+        (d.isoformat(),))} if conn.execute(
+        "select 1 from sqlite_master where name = 'game_features'").fetchone() else {}
+    nflags = dict(conn.execute("select game_id, group_concat(market || ':' || side) from value_flags "
+                               "where result is null group by game_id").fetchall())
+    out = []
+    for r in rows:
+        h, a = by_nba_id(r["home_team_id"]), by_nba_id(r["away_team_id"])
+        mv = market_view(conn, r["game_id"]) or {}
+        mk = mv.get("ml_novig")
+        p = r["home_win_prob"]
+        notes = []
+        f = feats.get(r["game_id"])
+        if f is not None:
+            if f["h_b2b"]:
+                notes.append(f"{h.abbr} B2B")
+            if f["a_b2b"]:
+                notes.append(f"{a.abbr} B2B")
+            if f["h_rest"] is not None and f["a_rest"] is not None and abs(f["h_rest"] - f["a_rest"]) >= 2:
+                notes.append(f"rest {f['h_rest']}-{f['a_rest']}")
+            if min(f["h_gp_szn"] or 0, f["a_gp_szn"] or 0) < 5:
+                notes.append("low gp")
+        if not mv:
+            notes.append("no odds")
+        if r["game_id"] in nflags:
+            notes.append("FLAG " + nflags[r["game_id"]])
+        out.append({
+            "game": f"{a.abbr} @ {h.abbr}",
+            "model win% (home)": f"{100 * p:.1f}" if p is not None else "-",
+            "market win%": f"{100 * mk[0]:.1f}" if mk else "-",
+            "edge": f"{100 * (p - mk[0]):+.1f}" if mk and p is not None else "-",
+            "proj spread / line": (f"{-r['pred_margin']:+.1f} / "
+                                   + (f"{mv['home_spread']:+.1f}" if mv.get("home_spread") is not None else "-"))
+            if r["pred_margin"] is not None else "-",
+            "proj total / line": (f"{r['pred_total']:.1f} / " + (f"{mv['total']:.1f}" if mv.get("total") else "-"))
+            if r["pred_total"] is not None else "-",
+            "notes": ", ".join(notes),
+        })
+    return pd.DataFrame(out).to_string(index=False) if out else "(no games on this date)"
+
+
+@app.command()
+def daily(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), default today")] = None) -> None:
+    """ingest → slate → espn (yesterday) → odds → features → predict → flags → table.
+    Any failing data step prints a message and the rest still runs. Analysis only."""
+    from nba_predict.analysis.enrich import build_enriched
+    from nba_predict.backtest import best_model
+    from nba_predict.data.espn_client import EspnClient
+    from nba_predict.data.odds_client import OddsApiClient, OddsApiError
+    from nba_predict.features.build import build_feature_table
+    from nba_predict.flags import flag_values
+    from nba_predict.predict import predict_date
+
+    s = get_settings()
+    d = _today_or(date)
+    conn = _conn()
+    nba = NbaClient(delay_s=s.nba_delay_s)
+    steps = [
+        ("ingest", lambda: f"{ingest_mod.ingest_season(conn, nba, s.current_season)} team_games rows"),
+        ("slate", lambda: f"{ingest_mod.ingest_slate(conn, nba, d)} games"),
+        ("espn", lambda: f"{ingest_mod.ingest_espn_lines(conn, EspnClient(delay_s=s.espn_delay_s), d - dt.timedelta(days=1), d - dt.timedelta(days=1))} lines"),
+    ]
+    for name, fn in steps:
+        try:
+            typer.echo(f"[{name}] {fn()}")
+        except IngestError as e:
+            typer.echo(f"[{name}] skipped: {e}")
+    have_odds = True
+    try:
+        n = ingest_mod.ingest_odds(conn, OddsApiClient(s.odds_api_key))
+        typer.echo(f"[odds] {n} snapshots")
+    except OddsApiError as e:
+        have_odds = False
+        typer.echo(f"[odds] skipped: {e}")
+    build_enriched(conn)
+    f = build_feature_table(conn, s.windows)
+    typer.echo(f"[features] {len(f)} games")
+    pred = predict_date(conn, d)
+    typer.echo(f"[predict] {pred.game_id.nunique() if not pred.empty else 0} games")
+    model = best_model(conn)
+    if have_odds:
+        typer.echo(f"[flags] {len(flag_values(conn, d, model))} value flags ({model})")
+    else:
+        typer.echo("[flags] flags skipped: no live odds")
+    typer.echo(f"\n{d} — model: {model} (injuries not included; analysis only)")
+    typer.echo(_daily_table(conn, d, model))
