@@ -122,3 +122,23 @@ def test_fit_recovers_hca():
     assert p.hca == pytest.approx(3.0, abs=0.3)  # noise sd 4 on 600 rows: se ~0.16
     assert 3 < p.sigma < 5 and 10 < p.sigma_total < 20
     assert sum(p.weights.values()) == pytest.approx(1) and 0 <= p.split_weight <= 1
+
+
+def test_fit_sigma_is_rms_not_std():
+    """A model whose margin residuals are biased must not report a too-small sigma."""
+    from nba_predict.models import window_rating as wr
+
+    rows = []
+    for i in range(50):
+        r = _row()
+        r["game_id"] = f"g{i}"
+        r["margin"] = 10.0 + (1 if i % 2 else -1)   # pred is hca only; residual mean ~ (10 - hca)
+        r["total"] = 228.0 + 6 + (1 if i % 2 else -1)  # pred 228 -> residual mean 6, sd 1
+        rows.append(r)
+    df = pd.DataFrame(rows)
+    p = wr.fit(df, WindowParams(hca=0.0))
+    pred = predict_rows(df, p)
+    resid = df.margin - pred.pred_margin
+    assert p.sigma == pytest.approx(float(np.sqrt(np.mean(resid ** 2))))
+    assert p.sigma_total == pytest.approx(float(np.sqrt(np.mean((df.total - pred.pred_total) ** 2))))
+    assert p.sigma_total > 5  # RMS ~6.08; std would say 1.0

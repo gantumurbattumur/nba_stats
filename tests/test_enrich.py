@@ -168,3 +168,18 @@ def test_load_enriched_rebuilds_table_without_fingerprint(fixture_db):
     fixture_db.execute("delete from derived_meta")
     fixture_db.commit()
     assert len(load_enriched(fixture_db)) == 96
+
+
+def test_rest_days_never_negative_on_same_date_glitch(fixture_db):
+    """Two games for one team on one date (data glitch) must not give rest_days = -1."""
+    from nba_predict.features.build import build_feature_table
+
+    row = dict(fixture_db.execute("select * from games where game_id = '0022400000'").fetchone())
+    tg = [dict(r) for r in fixture_db.execute("select * from team_games where game_id = '0022400000'")]
+    dup = "0022400999"
+    upsert(fixture_db, "games", [{**row, "game_id": dup}], ["game_id"])
+    upsert(fixture_db, "team_games", [{**t, "game_id": dup} for t in tg], ["game_id", "team_id"])
+    e = build_enriched(fixture_db)
+    assert (e.rest_days >= 0).all()
+    f = build_feature_table(fixture_db)
+    assert (f.h_rest >= 0).all() and (f.a_rest >= 0).all()

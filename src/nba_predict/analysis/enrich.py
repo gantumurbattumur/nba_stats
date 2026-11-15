@@ -52,7 +52,7 @@ def _schedule(df: pd.DataFrame) -> pd.DataFrame:
     g = df.groupby(["team_id", "season"])["_date"]
     prev = g.shift(1)
     rest = (d - prev).dt.days - 1
-    df["rest_days"] = rest.clip(upper=7).fillna(7).astype(int)
+    df["rest_days"] = rest.clip(lower=0, upper=7).fillna(7).astype(int)  # >= 0 even for same-date glitches
     df["b2b"] = df["rest_days"] == 0
     df["three_in_four"] = (d - g.shift(2)).dt.days.le(3).fillna(False).astype(bool)
     return df

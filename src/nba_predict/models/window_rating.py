@@ -131,7 +131,8 @@ def predict_profiles(h: dict, a: dict, h_sched: dict, a_sched: dict,
 
 def fit(train: pd.DataFrame, base: WindowParams = WindowParams()) -> WindowParams:
     """Fit hca, b2b_pts, rest_pts, split_weight and window weights (softmax) on margin MSE;
-    then sigma / sigma_total from residual standard deviations."""
+    then sigma / sigma_total as the RMS of the residuals (not the std, which would hide a
+    biased model's error)."""
     train = train[train["margin"].notna()]
     wins = list(base.weights)
     harr = _side_arrays(train, "h", wins, base.use_sos)
@@ -166,6 +167,7 @@ def fit(train: pd.DataFrame, base: WindowParams = WindowParams()) -> WindowParam
         hca=float(u["hca"]), b2b_pts=float(u["b2b_pts"]), rest_pts=float(u["rest_pts"]),
         split_weight=u["split_weight"],
         weights={w: float(v) for w, v in zip(wins, u["wts"])},
-        sigma=float(np.std(y - m)),
-        sigma_total=float(np.nanstd(resid_t)) if np.isfinite(resid_t).any() else base.sigma_total,
+        sigma=float(np.sqrt(np.mean((y - m) ** 2))),
+        sigma_total=(float(np.sqrt(np.nanmean(resid_t ** 2))) if np.isfinite(resid_t).any()
+                     else base.sigma_total),
     ))

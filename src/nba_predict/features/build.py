@@ -130,7 +130,7 @@ def _schedule(games: pd.DataFrame) -> pd.DataFrame:
         g[["game_id", "season", "_date"]].assign(team_id=g.away_team_id, side="a"),
     ]).sort_values(["team_id", "_date"])
     grp = long.groupby(["team_id", "season"])["_date"]
-    long["rest"] = ((long._date - grp.shift(1)).dt.days - 1).clip(upper=7).fillna(7).astype(int)
+    long["rest"] = ((long._date - grp.shift(1)).dt.days - 1).clip(lower=0, upper=7).fillna(7).astype(int)
     long["b2b"] = (long.rest == 0).astype(int)
     long["3in4"] = (long._date - grp.shift(2)).dt.days.le(3).fillna(False).astype(int)
     out = {}
