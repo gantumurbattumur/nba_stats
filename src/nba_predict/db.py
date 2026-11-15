@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -138,6 +139,16 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _check_ident(name: str) -> str:
+    """Table/column names are interpolated into SQL, so only plain identifiers are allowed."""
+    if not isinstance(name, str) or not _IDENT.match(name):
+        raise ValueError(f"unsafe SQL identifier: {name!r}")
+    return name
+
+
 def upsert(conn: sqlite3.Connection, table: str, rows: list[dict], key: list[str]) -> int:
     """INSERT ... ON CONFLICT(key) DO UPDATE for each row. Returns rows written.
 
@@ -146,24 +157,34 @@ def upsert(conn: sqlite3.Connection, table: str, rows: list[dict], key: list[str
     """
     if not rows:
         return 0
+    _check_ident(table)
+    for k in key:
+        _check_ident(k)
     n = 0
     # group rows by their column set so partial rows don't overwrite other columns
     groups: dict[tuple[str, ...], list[dict]] = {}
     for r in rows:
         groups.setdefault(tuple(r.keys()), []).append(r)
-    for cols, grp in groups.items():
-        col_sql = ", ".join(f'"{c}"' for c in cols)
-        ph = ", ".join("?" for _ in cols)
-        updates = [c for c in cols if c not in key]
-        if updates:
-            set_sql = ", ".join(f'"{c}" = excluded."{c}"' for c in updates)
-            conflict = f"DO UPDATE SET {set_sql}"
-        else:
-            conflict = "DO NOTHING"
-        key_sql = ", ".join(f'"{k}"' for k in key)
-        sql = f'INSERT INTO "{table}" ({col_sql}) VALUES ({ph}) ON CONFLICT ({key_sql}) {conflict}'
-        conn.executemany(sql, [tuple(r[c] for c in cols) for r in grp])
-        n += len(grp)
+    for cols in groups:  # validate everything before writing anything
+        for c in cols:
+            _check_ident(c)
+    try:
+        for cols, grp in groups.items():
+            col_sql = ", ".join(f'"{c}"' for c in cols)
+            ph = ", ".join("?" for _ in cols)
+            updates = [c for c in cols if c not in key]
+            if updates:
+                set_sql = ", ".join(f'"{c}" = excluded."{c}"' for c in updates)
+                conflict = f"DO UPDATE SET {set_sql}"
+            else:
+                conflict = "DO NOTHING"
+            key_sql = ", ".join(f'"{k}"' for k in key)
+            sql = f'INSERT INTO "{table}" ({col_sql}) VALUES ({ph}) ON CONFLICT ({key_sql}) {conflict}'
+            conn.executemany(sql, [tuple(r[c] for c in cols) for r in grp])
+            n += len(grp)
+    except Exception:
+        conn.rollback()  # all-or-nothing: don't leave earlier groups pending in the transaction
+        raise
     conn.commit()
     return n
 
