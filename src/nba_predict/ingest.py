@@ -100,6 +100,11 @@ def ingest_season(conn: sqlite3.Connection, client, season: str) -> int:
     return upsert(conn, "team_games", tgs, ["game_id", "team_id"])
 
 
+# NBA game-id prefixes: 001 preseason, 002 regular season, 003 All-Star, 004 playoffs,
+# 005 play-in, 006 NBA Cup final. Preseason/All-Star never get a regular-season box score.
+_NON_SCORED_PREFIXES = ("001", "003")
+
+
 def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     """Upsert the day's games. Never touches a row already ``final``.
 
@@ -117,13 +122,16 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     """
     params = []
     for r in rows:
+        if str(r["game_id"])[:3] in _NON_SCORED_PREFIXES:
+            log.info("slate: skipping preseason/All-Star game %s", r["game_id"])
+            continue
         status = "scheduled" if r["status"] == "final" else r["status"]
         gdate = r["game_date"]
         params.append((r["game_id"], season_for_date(dt.date.fromisoformat(gdate)), gdate,
                        r["home_team_id"], r["away_team_id"], status))
     conn.executemany(sql, params)
     conn.commit()
-    return len(rows)
+    return len(params)
 
 
 def ingest_espn_lines(

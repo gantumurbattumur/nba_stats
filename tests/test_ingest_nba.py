@@ -215,3 +215,12 @@ def test_live_slate_used_for_today(monkeypatch):
     assert NbaClient(delay_s=0).slate(date(2026, 11, 15)) == [dict(
         game_id="0022600240", game_date="2026-11-15", home_team_id=1610612738,
         away_team_id=1610612742, status="scheduled")]
+
+
+def test_slate_skips_preseason_and_all_star(conn, fake_client):
+    # LeagueGameLog (regular season) never finalizes these, so they'd sit 'scheduled' forever
+    mk = lambda gid: dict(game_id=gid, game_date="2026-10-10", home_team_id=1610612738,
+                          away_team_id=1610612752, status="final")
+    fake_client.slate_rows = [mk("0012600001"), mk("0032600001"), mk("0022600001")]
+    ingest_slate(conn, fake_client, date(2026, 10, 10))
+    assert [r[0] for r in conn.execute("select game_id from games")] == ["0022600001"]
