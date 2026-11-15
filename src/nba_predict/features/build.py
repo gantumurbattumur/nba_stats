@@ -19,7 +19,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-from nba_predict.analysis.enrich import build_enriched, closing_lines
+from nba_predict.analysis.enrich import closing_lines, load_enriched
 from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
 from nba_predict.ingest import season_for_date
@@ -155,16 +155,9 @@ def _market(conn: sqlite3.Connection) -> pd.DataFrame:
     return m
 
 
-def _load_enriched(conn: sqlite3.Connection) -> pd.DataFrame:
-    try:
-        return pd.read_sql_query("select * from team_games_enriched", conn)
-    except Exception:  # noqa: BLE001 - not built yet
-        return build_enriched(conn)
-
-
 def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.DataFrame:
     windows = tuple(int(w) for w in windows)
-    e = _load_enriched(conn)
+    e = load_enriched(conn)
     games = pd.read_sql_query(
         "select game_id, season, season_type, game_date, status, home_team_id, away_team_id, "
         "home_pts, away_pts from games", conn)

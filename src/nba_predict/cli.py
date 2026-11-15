@@ -139,9 +139,7 @@ def explore(
     csv: Annotated[str | None, typer.Option(help="write the table to this CSV path")] = None,
 ) -> None:
     """Filter team_games_enriched and print aggregate metrics."""
-    import pandas as pd
-
-    from nba_predict.analysis.enrich import build_enriched
+    from nba_predict.analysis.enrich import load_enriched
     from nba_predict.analysis.filters import FilterSpec, apply_filter, load_preset
     from nba_predict.analysis.metrics import aggregate
 
@@ -150,10 +148,7 @@ def explore(
     overrides = {k: v for k, v in dict(teams=team, venue=venue, last_n=last_n, seasons=season).items() if v}
     spec = spec.model_copy(update=overrides)
     spec = FilterSpec.model_validate(spec.model_dump())  # re-validate overrides
-    try:
-        df = pd.read_sql_query("select * from team_games_enriched", conn)
-    except Exception:  # noqa: BLE001 - table not built yet
-        df = build_enriched(conn)
+    df = load_enriched(conn)  # rebuilt when team_games / closing lines changed since last build
     out = aggregate(apply_filter(df, spec), [m.strip() for m in metrics.split(",") if m.strip()],
                     group_by=[g.strip() for g in group_by.split(",")] if group_by else None)
     typer.echo(spec.describe())

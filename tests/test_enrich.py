@@ -118,3 +118,53 @@ def test_missing_odds_null(enriched):
 def test_month_weekday(enriched):
     g = _bos(enriched).iloc[0]  # 2024-10-22 was a Tuesday
     assert g.month == 10 and g.weekday == 1
+
+
+def test_load_enriched_rebuilds_when_stale(fixture_db):
+    from nba_predict.analysis.enrich import load_enriched
+
+    n0 = len(load_enriched(fixture_db))
+    assert n0 == 96
+    calls = []
+    import nba_predict.analysis.enrich as en
+    orig = en.build_enriched
+    en.build_enriched = lambda c: calls.append(1) or orig(c)
+    try:
+        assert len(load_enriched(fixture_db)) == 96 and calls == []  # fresh: reused
+        # new final game (row count + max date change)
+        fixture_db.execute("update games set status='final', home_pts=100, away_pts=90 "
+                           "where game_id='0022599000'")
+        fixture_db.executemany(
+            "insert into team_games (game_id, team_id, opp_team_id, season, game_date, is_home, wl,"
+            " min, pts, fgm, fga, fg3m, fg3a, ftm, fta, oreb, dreb, reb, ast, stl, blk, tov, pf,"
+            " plus_minus, season_type) select '0022599000', ?, ?, '2025-26', '2025-11-10', ?, ?,"
+            " 240, ?, 40, 85, 10, 30, 10, 15, 10, 30, 40, 20, 5, 5, 12, 20, ?, 'regular'",
+            [(1610612738, 1610612752, 1, "W", 100, 10.0), (1610612752, 1610612738, 0, "L", 90, -10.0)])
+        fixture_db.commit()
+        assert len(load_enriched(fixture_db)) == 98 and len(calls) == 1
+        # box-score correction with unchanged row count
+        fixture_db.execute("update team_games set pts = pts + 1 where game_id='0022400000'")
+        fixture_db.commit()
+        load_enriched(fixture_db)
+        assert len(calls) == 2
+        # new/changed closing line (ESPN backfill) with unchanged team_games
+        fixture_db.execute("update odds_snapshots set home_spread = home_spread - 1 "
+                           "where id = (select min(id) from odds_snapshots)")
+        fixture_db.commit()
+        load_enriched(fixture_db)
+        assert len(calls) == 3
+        load_enriched(fixture_db)
+        assert len(calls) == 3
+    finally:
+        en.build_enriched = orig
+
+
+def test_load_enriched_rebuilds_table_without_fingerprint(fixture_db):
+    # DBs built before the fingerprint existed: stale rows in the table, no meta row
+    from nba_predict.analysis.enrich import build_enriched, load_enriched
+
+    build_enriched(fixture_db)
+    fixture_db.execute("delete from team_games_enriched where season = '2025-26'")
+    fixture_db.execute("delete from derived_meta")
+    fixture_db.commit()
+    assert len(load_enriched(fixture_db)) == 96

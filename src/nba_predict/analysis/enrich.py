@@ -3,6 +3,8 @@ schedule, closing odds from the team's side, and opponent strength as of the gam
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 import sqlite3
 
 import numpy as np
@@ -78,7 +80,38 @@ def _opp_strength(df: pd.DataFrame) -> pd.DataFrame:
         ["season", "_date", "opp_team_id", "opp_win_pct_pre", "opp_net_pre", "opp_net_rank_pre"]]
 
 
+def source_fingerprint(conn: sqlite3.Connection) -> str:
+    """Cheap signature of everything ``team_games_enriched`` is derived from: final team-game
+    count, latest date and box-score sums, plus closing-snapshot count/ids/line sums. Any
+    ingest, box-score correction or new/changed closing line changes it."""
+    tg = conn.execute(
+        "select count(*), max(t.game_date), total(t.pts), total(t.fgm), total(t.fga), "
+        "total(t.fg3m), total(t.fta), total(t.oreb), total(t.dreb), total(t.tov), total(t.min), "
+        "total(t.is_home), group_concat(distinct t.season_type) "
+        "from team_games t join games g on g.game_id = t.game_id where g.status = 'final'"
+    ).fetchone()
+    od = conn.execute(
+        "select count(*), max(id), total(home_spread), total(total), total(home_ml), "
+        "total(away_ml), max(pulled_at) from odds_snapshots where is_closing = 1"
+    ).fetchone()
+    return json.dumps([list(tg), list(od)])
+
+
+def load_enriched(conn: sqlite3.Connection) -> pd.DataFrame:
+    """``team_games_enriched`` if it was built from the current source rows, else rebuild."""
+    fp = source_fingerprint(conn)
+    row = conn.execute(
+        "select fingerprint from derived_meta where name = 'team_games_enriched'").fetchone()
+    exists = conn.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'team_games_enriched'"
+    ).fetchone()
+    if exists and row and row[0] == fp:
+        return pd.read_sql_query("select * from team_games_enriched", conn)
+    return build_enriched(conn)
+
+
 def build_enriched(conn: sqlite3.Connection) -> pd.DataFrame:
+    fp = source_fingerprint(conn)  # taken before reading, so a concurrent write forces a rebuild
     tg = pd.read_sql_query(
         "select t.* from team_games t join games g on g.game_id = t.game_id where g.status = 'final'",
         conn)
@@ -120,5 +153,9 @@ def build_enriched(conn: sqlite3.Connection) -> pd.DataFrame:
     df["weekday"] = df["_date"].dt.day_of_week
     df = df.drop(columns=["_date"]).sort_values(["game_date", "game_id", "is_home"]).reset_index(drop=True)
     df.to_sql("team_games_enriched", conn, if_exists="replace", index=False)
+    conn.execute(
+        "insert into derived_meta (name, fingerprint, built_at) values ('team_games_enriched', ?, ?) "
+        "on conflict (name) do update set fingerprint = excluded.fingerprint, built_at = excluded.built_at",
+        (fp, dt.datetime.now(dt.UTC).isoformat(timespec="seconds")))
     conn.commit()
     return df

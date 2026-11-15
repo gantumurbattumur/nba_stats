@@ -116,6 +116,13 @@ CREATE TABLE IF NOT EXISTS custom_features (
     created_at TEXT
 );
 
+-- fingerprint of the source rows each derived (pandas-written) table was built from
+CREATE TABLE IF NOT EXISTS derived_meta (
+    name TEXT PRIMARY KEY,
+    fingerprint TEXT,
+    built_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS backtest_results (
     run_at TEXT,
     model TEXT,
