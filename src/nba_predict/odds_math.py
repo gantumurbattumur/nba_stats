@@ -7,16 +7,23 @@ from statistics import median
 from typing import Literal
 
 
+def _check(odds) -> float:
+    o = float(odds)
+    if -100 < o < 100:  # e.g. 0; prices are <= -100 or >= +100
+        raise ValueError(f"invalid American odds {odds!r}")
+    return o
+
+
 def american_to_prob(odds: int) -> float:
     """Implied probability (includes the bookmaker margin)."""
-    odds = float(odds)
+    odds = _check(odds)
     if odds < 0:
         return -odds / (-odds + 100.0)
     return 100.0 / (odds + 100.0)
 
 
 def american_to_decimal(odds: int) -> float:
-    odds = float(odds)
+    odds = _check(odds)
     if odds < 0:
         return 1.0 + 100.0 / -odds
     return 1.0 + odds / 100.0

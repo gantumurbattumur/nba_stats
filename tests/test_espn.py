@@ -1,6 +1,7 @@
 import json
 from datetime import date
 
+import pytest
 import responses
 
 from conftest import load_fixture
@@ -95,3 +96,66 @@ def test_client_urls(monkeypatch):
     c = EspnClient(delay_s=1.0)
     assert len(c.events(date(2026, 11, 10))) == 6
     assert parse_pickcenter(c.summary("401909960"))["home_ml"] == -1040
+
+
+def test_spread_is_home_perspective_when_home_is_underdog():
+    # home underdog: ESPN spread is positive (home +4.5), home ML positive
+    s = {"pickcenter": [{"provider": {"name": "Draft Kings"}, "spread": 4.5, "overUnder": 230.0,
+                         "homeTeamOdds": {"moneyLine": 160, "spreadOdds": -110, "underdog": True},
+                         "awayTeamOdds": {"moneyLine": -190, "spreadOdds": -110, "favorite": True}}]}
+    p = parse_pickcenter(s)
+    assert p["home_spread"] == 4.5 and p["home_ml"] == 160 and p["away_ml"] == -190
+
+
+def test_pickem_spread_zero_is_not_missing():
+    s = {"pickcenter": [{"provider": {"name": "x"}, "spread": 0, "overUnder": 220,
+                         "homeTeamOdds": {"moneyLine": -110}, "awayTeamOdds": {"moneyLine": -110}}]}
+    assert parse_pickcenter(s)["home_spread"] == 0.0
+
+
+def test_invalid_prices_become_none():
+    # ESPN occasionally serves 0 / blank prices; they must not reach odds_math as real odds
+    s = {"pickcenter": [{"provider": {"name": "x"}, "spread": -2.5, "overOdds": 0, "underOdds": "",
+                         "homeTeamOdds": {"moneyLine": 0, "spreadOdds": "EVEN"},
+                         "awayTeamOdds": {"moneyLine": -50}}]}
+    p = parse_pickcenter(s)
+    assert p["home_spread"] == -2.5
+    assert p["home_ml"] is None and p["away_ml"] is None and p["over_price"] is None
+    assert p["under_price"] is None
+
+
+@pytest.mark.parametrize("iso,et", [
+    ("2026-11-11T03:30Z", "2026-11-10"),   # 10:30pm EST tip, next day UTC
+    ("2026-11-11T04:59Z", "2026-11-10"),
+    ("2026-11-11T05:00Z", "2026-11-11"),   # midnight EST
+    ("2026-10-22T03:30Z", "2026-10-21"),   # EDT (UTC-4): 11:30pm
+    ("2026-10-22T04:00Z", "2026-10-22"),   # EDT midnight
+    ("2026-11-02T04:30Z", "2026-11-01"),   # day after DST ends (EST, UTC-5)
+])
+def test_et_date_boundaries(iso, et):
+    from nba_predict.data.espn_client import _et_date
+    assert _et_date(iso) == et
+
+
+@responses.activate
+def test_client_retries_then_raises(monkeypatch):
+    from nba_predict.data import espn_client
+    from nba_predict.data.nba_client import IngestError
+
+    monkeypatch.setattr(espn_client.time, "sleep", lambda s: None)
+    responses.get(f"{BASE}/summary", status=503)
+    with pytest.raises(IngestError):
+        EspnClient(delay_s=0).summary("1")
+    assert len(responses.calls) == 3
+
+
+def test_ingest_warns_when_espn_home_away_flipped(conn, fake_espn, seeded_games, caplog):
+    # ESPN lists PHI @ BOS while the NBA has BOS @ PHI (neutral-site style disagreement):
+    # must not silently drop the game, and must not attach a line with the wrong sign
+    fake_espn._events = [{**e, "home_espn_abbr": "BOS", "away_espn_abbr": "PHI"}
+                         if e["espn_event_id"] == "401909961" else e for e in fake_espn._events]
+    with caplog.at_level("WARNING"):
+        ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert any("401909961" in r.getMessage() and "home/away" in r.getMessage() for r in caplog.records)
+    row = conn.execute("select espn_event_id from games where game_id='0022600212'").fetchone()
+    assert row[0] is None

@@ -140,7 +140,7 @@ def ingest_espn_lines(
     from nba_predict.data.espn_client import parse_pickcenter
     from nba_predict.teams import by_espn_abbr
 
-    need_sql = "select game_id, home_team_id from games where game_date = ?"
+    need_sql = "select game_id, home_team_id, away_team_id from games where game_date = ?"
     if only_missing:
         need_sql += """ and espn_event_id is null and not exists (
             select 1 from odds_snapshots o where o.game_id = games.game_id and o.source = 'espn')"""
@@ -148,7 +148,10 @@ def ingest_espn_lines(
     d = date_from
     while d <= date_to:
         ds = d.isoformat()
-        need = {int(r["home_team_id"]): r["game_id"] for r in conn.execute(need_sql, (ds,))}
+        rows = conn.execute(need_sql, (ds,)).fetchall()
+        need = {int(r["home_team_id"]): r["game_id"] for r in rows}
+        # (espn home, espn away) as NBA (away, home): ESPN disagrees on home/away for this game
+        flipped = {(int(r["away_team_id"]), int(r["home_team_id"])): r["game_id"] for r in rows}
         d += dt.timedelta(days=1)
         if not need:
             continue
@@ -159,7 +162,15 @@ def ingest_espn_lines(
                     log.warning("ESPN event %s: unknown home abbr %r", ev["espn_event_id"], ev["home_espn_abbr"])
                 continue
             gid = need.get(team.nba_id)
-            if gid is None or not ev["completed"]:
+            if gid is None:
+                away = by_espn_abbr(ev["away_espn_abbr"])
+                fgid = flipped.get((team.nba_id, away.nba_id)) if away else None
+                if fgid is not None:
+                    # attaching this line would invert home_spread / ML sides; leave it unlinked
+                    log.warning("ESPN event %s: home/away reversed vs NBA game %s; skipped",
+                                ev["espn_event_id"], fgid)
+                continue
+            if not ev["completed"]:
                 continue
             line = parse_pickcenter(client.summary(ev["espn_event_id"]))
             conn.execute("update games set espn_event_id = ? where game_id = ?", (ev["espn_event_id"], gid))

@@ -49,3 +49,21 @@ def test_consensus_and_best():
 def test_consensus_sums_to_one():
     a, b = consensus_novig([(-150, 130), (-140, 120), (-160, 135)])
     assert a + b == pytest.approx(1.0)
+
+
+def test_even_money_both_signs():
+    assert american_to_prob(100) == american_to_prob(-100) == pytest.approx(0.5)
+    assert american_to_decimal(-100) == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("bad", [0, 50, -50, 99, -99])
+def test_invalid_american_odds_rejected(bad):
+    # |odds| < 100 is not a valid American price; 0 used to imply a 100% chance
+    with pytest.raises(ValueError):
+        american_to_prob(bad)
+    with pytest.raises(ValueError):
+        american_to_decimal(bad)
+
+
+def test_best_price_mixed_signs():
+    assert best_price([-105, 100, -110]) == 100

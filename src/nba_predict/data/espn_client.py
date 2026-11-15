@@ -28,6 +28,12 @@ def _num(v, cast):
         return None
 
 
+def _price(v) -> int | None:
+    """American price or ``None``; values strictly between -100 and +100 (e.g. 0) are invalid."""
+    p = _num(v, int)
+    return None if p is None or -100 < p < 100 else p
+
+
 def _et_date(iso: str) -> str:
     """ESPN timestamps look like '2026-11-11T00:30Z' (UTC) → Eastern calendar date."""
     t = dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -59,14 +65,14 @@ def parse_pickcenter(summary: dict) -> dict | None:
     home = pc.get("homeTeamOdds") or {}
     away = pc.get("awayTeamOdds") or {}
     out = dict(
-        home_ml=_num(home.get("moneyLine"), int),
-        away_ml=_num(away.get("moneyLine"), int),
+        home_ml=_price(home.get("moneyLine")),
+        away_ml=_price(away.get("moneyLine")),
         home_spread=_num(pc.get("spread"), float),
-        home_spread_price=_num(home.get("spreadOdds"), int),
-        away_spread_price=_num(away.get("spreadOdds"), int),
+        home_spread_price=_price(home.get("spreadOdds")),
+        away_spread_price=_price(away.get("spreadOdds")),
         total=_num(pc.get("overUnder"), float),
-        over_price=_num(pc.get("overOdds"), int),
-        under_price=_num(pc.get("underOdds"), int),
+        over_price=_price(pc.get("overOdds")),
+        under_price=_price(pc.get("underOdds")),
     )
     if all(v is None for v in out.values()):
         return None
