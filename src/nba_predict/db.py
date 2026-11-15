@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS games (
     away_pts INTEGER,
     status TEXT,
     espn_event_id TEXT,
-    season_type TEXT NOT NULL DEFAULT 'regular'
+    season_type TEXT NOT NULL DEFAULT 'regular',
+    espn_core_checked INTEGER NOT NULL DEFAULT 0  -- ESPN core odds API already queried
 );
 CREATE INDEX IF NOT EXISTS ix_games_date ON games(game_date);
 
@@ -157,6 +158,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if "season_type" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN season_type TEXT NOT NULL DEFAULT 'regular'")
             conn.execute(f"UPDATE {table} SET season_type = {SEASON_TYPE_SQL}")
+    gcols = {r[1] for r in conn.execute("PRAGMA table_info(games)")}
+    if "espn_core_checked" not in gcols:
+        conn.execute("ALTER TABLE games ADD COLUMN espn_core_checked INTEGER NOT NULL DEFAULT 0")
     bt = {r[1] for r in conn.execute("PRAGMA table_info(backtest_results)")}
     if "segment" not in bt:
         conn.execute("ALTER TABLE backtest_results ADD COLUMN segment TEXT NOT NULL DEFAULT 'all'")

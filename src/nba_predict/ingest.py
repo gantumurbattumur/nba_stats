@@ -155,32 +155,74 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
 
 
 def ingest_espn_lines(
-    conn: sqlite3.Connection, client, date_from: dt.date, date_to: dt.date, only_missing: bool = True
+    conn: sqlite3.Connection, client, date_from: dt.date, date_to: dt.date, only_missing: bool = True,
+    with_open: bool = False,
 ) -> int:
-    """Attach ESPN event ids and closing lines to ``games`` for each date in the range.
+    """Attach ESPN event ids and lines to ``games`` for each date in the range.
 
     Matches events by (ET game_date, home team via ``by_espn_abbr``). Only completed events
-    are fetched (their pickcenter line is the closing line). A fetched game gets
-    ``espn_event_id`` even when ESPN has no line. With ``only_missing``, games that already
-    have an espn snapshot *or* an ``espn_event_id`` (fetched before, no line) are skipped, and
-    dates with nothing to fetch make no calls. Returns snapshots written.
+    are fetched. The summary ``pickcenter`` line is stored as the closing line. When it is
+    empty, the ESPN core odds API is queried (first non-live provider): its close is stored as
+    the closing line (``is_closing=1``, ``<date>T23:59:59Z``) and its open as an extra snapshot
+    (``is_closing=0``, ``<date>T12:00:00Z``). ``with_open`` also fetches the core API for games
+    that already have a pickcenter close, to add their open line. ``games.espn_core_checked``
+    marks games whose core odds were queried, so resumes never repeat a call.
+
+    With ``only_missing``: unlinked games go through scoreboard → summary (→ core); linked games
+    still lacking a close (or an open, with ``with_open``) and not yet core-checked go straight
+    to the core API; everything else — and dates with nothing to do — makes no calls.
+    Returns snapshots written (closes + opens).
     """
-    from nba_predict.data.espn_client import EspnNotFound, parse_pickcenter
+    from nba_predict.data.espn_client import EspnNotFound, parse_core_odds, parse_pickcenter
     from nba_predict.teams import by_espn_abbr
 
+    has = ("exists (select 1 from odds_snapshots o where o.game_id = games.game_id and o.source = 'espn'"
+           " and o.is_closing = {})")
     need_sql = "select game_id, home_team_id, away_team_id from games where game_date = ?"
     if only_missing:
         need_sql += """ and espn_event_id is null and not exists (
             select 1 from odds_snapshots o where o.game_id = games.game_id and o.source = 'espn')"""
+    core_sql = ("select game_id, espn_event_id from games where game_date = ? and status = 'final' "
+                "and espn_event_id is not null and espn_core_checked = 0 and (not " + has.format(1)
+                + (" or not " + has.format(0) if with_open else "") + ")")
+
+    def has_espn(gid: str, closing: int) -> bool:
+        return conn.execute("select 1 from odds_snapshots where game_id = ? and source = 'espn' "
+                            "and is_closing = ? limit 1", (gid, closing)).fetchone() is not None
+
+    def store(gid: str, ds: str, book: str, fields: dict | None, closing: bool) -> int:
+        if not fields:
+            return 0
+        upsert(conn, "odds_snapshots", [dict(
+            game_id=gid, source="espn", book=book, pulled_at=f"{ds}T{'23:59:59' if closing else '12:00:00'}Z",
+            is_closing=int(closing), **fields)], ["game_id", "source", "book", "pulled_at"])
+        return 1
+
+    def from_core(gid: str, event_id: str, ds: str, need_close: bool) -> int:
+        try:
+            core = parse_core_odds(client.core_odds(event_id))
+        except EspnNotFound as e:
+            log.warning("ESPN core odds for event %s (game %s) not found: %s", event_id, gid, e)
+            core = None
+        conn.execute("update games set espn_core_checked = 1 where game_id = ?", (gid,))
+        if core is None:
+            return 0
+        n = store(gid, ds, core["book"], core["close"], True) if need_close else 0
+        return n + (0 if has_espn(gid, 0) else store(gid, ds, core["book"], core["open"], False))
+
     written = 0
     d = date_from
     while d <= date_to:
         ds = d.isoformat()
+        d += dt.timedelta(days=1)
+        if only_missing:  # linked games: core API only, no scoreboard/summary calls
+            for r in conn.execute(core_sql, (ds,)).fetchall():
+                written += from_core(r["game_id"], r["espn_event_id"], ds, need_close=not has_espn(r["game_id"], 1))
+                conn.commit()
         rows = conn.execute(need_sql, (ds,)).fetchall()
         need = {int(r["home_team_id"]): r["game_id"] for r in rows}
         # (espn home, espn away) as NBA (away, home): ESPN disagrees on home/away for this game
         flipped = {(int(r["away_team_id"]), int(r["home_team_id"])): r["game_id"] for r in rows}
-        d += dt.timedelta(days=1)
         if not need:
             continue
         for ev in client.events(dt.date.fromisoformat(ds)):
@@ -209,10 +251,10 @@ def ingest_espn_lines(
                 line = None
             conn.execute("update games set espn_event_id = ? where game_id = ?", (ev["espn_event_id"], gid))
             if line is not None:
-                upsert(conn, "odds_snapshots", [dict(
-                    game_id=gid, source="espn", pulled_at=f"{ds}T23:59:59Z", is_closing=1, **line,
-                )], ["game_id", "source", "book", "pulled_at"])
-                written += 1
+                book = line.pop("book")
+                written += store(gid, ds, book, line, True)
+            if line is None or with_open:
+                written += from_core(gid, ev["espn_event_id"], ds, need_close=line is None)
             conn.commit()
     return written
 

@@ -206,3 +206,108 @@ def test_client_retries_only_transient_errors(monkeypatch, status, calls):
     with pytest.raises(IngestError):
         EspnClient(delay_s=0).summary("1")
     assert len(responses.calls) == calls
+
+
+# --- ESPN core odds API fallback (open + close lines) -------------------------------------------
+
+from nba_predict.data.espn_client import CORE_URL, EspnNotFound, parse_core_odds  # noqa: E402
+
+CORE_LAL = "espn_core_odds_401809244.json"  # GSW @ LAL 2025-10-21, ESPN BET + a live entry
+CORE_NYK = "espn_core_odds_401909960.json"  # MIL @ NYK 2026-11-10, Draft Kings
+
+
+def test_parse_core_odds_close_and_open():
+    p = parse_core_odds(load_fixture(CORE_LAL))
+    assert p["book"] == "ESPN BET"  # "ESPN Bet - Live Odds" skipped
+    assert p["close"] == dict(home_ml=130, away_ml=-150, home_spread=2.5, home_spread_price=-110,
+                              away_spread_price=-110, total=227.5, over_price=-110, under_price=-110)
+    assert p["open"] == dict(home_ml=115, away_ml=-135, home_spread=2.5, home_spread_price=-120,
+                             away_spread_price=100, total=224.5, over_price=-115, under_price=-105)
+
+
+def test_parse_core_odds_home_favorite_sign():
+    p = parse_core_odds(load_fixture(CORE_NYK))
+    assert p["book"] == "Draft Kings" and p["close"]["home_spread"] == -14.5
+    assert p["close"]["home_ml"] == -1040 and p["open"]["home_spread"] == -15.5
+    assert p["open"]["total"] == 219.5
+
+
+def test_parse_core_odds_live_only_or_empty():
+    d = load_fixture(CORE_LAL)
+    live = {**d, "items": [i for i in d["items"] if "Live" in i["provider"]["name"]]}
+    assert parse_core_odds(live) is None
+    assert parse_core_odds({"count": 0, "items": []}) is None
+
+
+def _snaps(conn, gid):
+    return [dict(r) for r in conn.execute(
+        "select book, pulled_at, is_closing, home_spread, total, home_ml from odds_snapshots "
+        "where game_id = ? order by is_closing", (gid,))]
+
+
+def test_core_fallback_when_pickcenter_empty(conn, fake_espn, seeded_games):
+    fake_espn.core = {"401909961": load_fixture(CORE_LAL)}  # BOS @ PHI is served without pickcenter
+    n = ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert n == 3  # NYK pickcenter close + PHI core close + PHI core open
+    assert fake_espn.core_calls == ["401909961"]  # pickcenter game not fetched from core
+    s = _snaps(conn, "0022600212")
+    assert s == [dict(book="ESPN BET", pulled_at="2026-11-10T12:00:00Z", is_closing=0, home_spread=2.5,
+                      total=224.5, home_ml=115),
+                 dict(book="ESPN BET", pulled_at="2026-11-10T23:59:59Z", is_closing=1, home_spread=2.5,
+                      total=227.5, home_ml=130)]
+    assert ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10)) == 0
+    assert fake_espn.core_calls == ["401909961"]
+
+
+def test_linked_game_without_line_gets_core_once(conn, fake_espn, seeded_games):
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))  # PHI linked, no line
+    assert fake_espn.core_calls == ["401909961"]  # first run already tried core (empty answer)
+    conn.execute("update games set espn_core_checked = 0 where game_id = '0022600212'")
+    fake_espn.core = {"401909961": load_fixture(CORE_LAL)}
+    ev_calls, sum_calls = fake_espn.events_calls, fake_espn.summary_calls
+    assert ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10)) == 2
+    assert (fake_espn.events_calls, fake_espn.summary_calls) == (ev_calls, sum_calls)  # core only
+    assert ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10)) == 0
+    assert fake_espn.core_calls == ["401909961", "401909961"]
+
+
+def test_with_open_adds_open_for_pickcenter_games(conn, fake_espn, seeded_games):
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    fake_espn.core = {"401909960": load_fixture(CORE_NYK)}
+    n = ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10), with_open=True)
+    assert n == 1
+    s = _snaps(conn, "0022600211")
+    assert [(x["is_closing"], x["home_spread"]) for x in s] == [(0, -15.5), (1, -14.5)]
+    assert ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10), with_open=True) == 0
+
+
+def test_core_404_marks_checked(conn, fake_espn, seeded_games):
+    fake_espn.core = {"401909961": EspnNotFound("HTTP 404")}
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert conn.execute("select espn_core_checked from games where game_id='0022600212'").fetchone()[0] == 1
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert fake_espn.core_calls == ["401909961"]
+
+
+def test_open_lines_do_not_change_closing_views(conn, fake_espn, seeded_games):
+    from nba_predict.analysis.enrich import closing_lines
+    from nba_predict.flags import market_view
+
+    fake_espn.core = {"401909961": load_fixture(CORE_LAL)}
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    cl = closing_lines(conn).set_index("game_id")
+    assert cl.loc["0022600212", "total"] == 227.5
+    assert market_view(conn, "0022600212")["total"] == 227.5  # latest pull = close
+    assert market_view(conn, "0022600212", closing_only=True)["total"] == 227.5
+
+
+@responses.activate
+def test_client_core_url(monkeypatch):
+    from nba_predict.data import espn_client
+
+    monkeypatch.setattr(espn_client.time, "sleep", lambda s: None)
+    responses.get(CORE_URL.format(event_id="401809244"), json=load_fixture(CORE_LAL))
+    assert EspnClient(delay_s=0).core_odds("401809244")["count"] == 2
+    assert responses.calls[0].request.url == (
+        "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/401809244/"
+        "competitions/401809244/odds")

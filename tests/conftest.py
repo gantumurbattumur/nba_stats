@@ -77,6 +77,19 @@ class FakeEspn:
         self.summary_calls += 1
         return self._with if event_id == "401909960" else self._without
 
+    # ESPN core odds API: ``core[event_id]`` = saved response; others answer "no items"
+    core: dict = {}
+    core_calls: list
+
+    def core_odds(self, event_id):
+        if not hasattr(self, "core_calls"):
+            self.core_calls = []
+        self.core_calls.append(event_id)
+        hit = self.core.get(event_id)
+        if isinstance(hit, Exception):
+            raise hit
+        return hit if hit is not None else {"count": 0, "items": []}
+
 
 @pytest.fixture
 def fake_espn() -> FakeEspn:

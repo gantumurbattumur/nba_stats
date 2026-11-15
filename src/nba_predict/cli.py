@@ -92,6 +92,7 @@ def espn(
     date_from: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD, default yesterday (ET)")] = None,
     date_to: Annotated[str | None, typer.Option("--to", help="YYYY-MM-DD, default --from")] = None,
     refetch: Annotated[bool, typer.Option(help="re-fetch games already fetched")] = False,
+    with_open: Annotated[bool, typer.Option("--with-open", help="also store ESPN core-API opening lines")] = False,
 ) -> None:
     """Backfill ESPN past-game closing lines (resumable; ~1 request/s)."""
     from nba_predict.data.espn_client import EspnClient
@@ -102,7 +103,7 @@ def espn(
     conn = _conn()
     try:
         n = ingest_mod.ingest_espn_lines(conn, EspnClient(delay_s=s.espn_delay_s), d0, d1,
-                                         only_missing=not refetch)
+                                         only_missing=not refetch, with_open=with_open)
     except IngestError as e:
         typer.echo(f"error: {e} (re-run to resume)", err=True)
         raise typer.Exit(1)
