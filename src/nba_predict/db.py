@@ -208,3 +208,58 @@ def upsert(conn: sqlite3.Connection, table: str, rows: list[dict], key: list[str
 
 def read_df(conn: sqlite3.Connection, sql: str, params=()) -> pd.DataFrame:
     return pd.read_sql_query(sql, conn, params=params)
+
+
+class QueryError(RuntimeError):
+    """User SQL rejected (not a single read-only SELECT) or failed."""
+
+
+_RO_ACTIONS = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION,
+               sqlite3.SQLITE_RECURSIVE}
+# introspection used by the SQL console sidebar (select ... from pragma_table_info('t'))
+_RO_PRAGMAS = {"table_info", "table_xinfo", "table_list", "index_list", "index_info"}
+_DENIED_FUNCS = {"load_extension"}
+
+
+def _ro_authorizer(action, arg1, arg2, _db, _trigger):
+    if action == sqlite3.SQLITE_FUNCTION and (arg2 or "").lower() in _DENIED_FUNCS:
+        return sqlite3.SQLITE_DENY
+    if action in _RO_ACTIONS:
+        return sqlite3.SQLITE_OK
+    if action == sqlite3.SQLITE_PRAGMA and (arg1 or "").lower() in _RO_PRAGMAS and arg2 is not None:
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
+def readonly_query(db_path: str | Path, sql: str, params=(), max_rows: int | None = 50_000,
+                   timeout_s: float = 30.0) -> pd.DataFrame:
+    """Run one user-supplied SELECT through a read-only connection (``mode=ro`` + authorizer
+    allowing only SELECT/READ/FUNCTION/RECURSIVE). Raises ``QueryError`` on anything else.
+    ``df.attrs["truncated"]`` tells whether more than ``max_rows`` rows existed."""
+    import time
+
+    stmt = sql.strip().rstrip(";").strip()
+    if not stmt:
+        raise QueryError("empty query")
+    uri = Path(db_path).resolve().as_uri() + "?mode=ro"
+    try:
+        conn = sqlite3.connect(uri, uri=True)
+    except sqlite3.Error as e:
+        raise QueryError(f"cannot open database read-only: {e}") from e
+    try:
+        conn.set_authorizer(_ro_authorizer)
+        deadline = time.monotonic() + timeout_s
+        conn.set_progress_handler(lambda: int(time.monotonic() > deadline), 10_000)
+        try:
+            cur = conn.execute(stmt, params)
+            cols = [d[0] for d in cur.description or []]
+            rows = cur.fetchall() if max_rows is None else cur.fetchmany(max_rows + 1)
+        except (sqlite3.Error, sqlite3.Warning, ValueError) as e:
+            # sqlite3.ProgrammingError "You can only execute one statement at a time." lands here
+            raise QueryError(str(e)) from e
+    finally:
+        conn.close()
+    truncated = max_rows is not None and len(rows) > max_rows
+    df = pd.DataFrame(rows[:max_rows] if truncated else rows, columns=cols)
+    df.attrs["truncated"] = truncated
+    return df
