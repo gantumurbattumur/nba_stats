@@ -159,3 +159,50 @@ def test_ingest_warns_when_espn_home_away_flipped(conn, fake_espn, seeded_games,
     assert any("401909961" in r.getMessage() and "home/away" in r.getMessage() for r in caplog.records)
     row = conn.execute("select espn_event_id from games where game_id='0022600212'").fetchone()
     assert row[0] is None
+
+
+@responses.activate
+def test_client_404_is_not_retried(monkeypatch):
+    from nba_predict.data import espn_client
+    from nba_predict.data.espn_client import EspnNotFound
+
+    monkeypatch.setattr(espn_client.time, "sleep", lambda s: None)
+    responses.get(f"{BASE}/summary", status=404)
+    with pytest.raises(EspnNotFound):
+        EspnClient(delay_s=0).summary("401869391")
+    assert len(responses.calls) == 1
+
+
+def test_summary_404_is_skipped_and_marked(conn, fake_espn, seeded_games, caplog):
+    # B, phase 1: a single 404 summary (e.g. 401869391) aborted `nba espn` and resume hit it again
+    from nba_predict.data.espn_client import EspnNotFound
+
+    orig = fake_espn.summary
+
+    def summary(event_id):
+        if event_id == "401909960":
+            raise EspnNotFound("404 Not Found")
+        return orig(event_id)
+
+    fake_espn.summary = summary
+    with caplog.at_level("WARNING"):
+        n = ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert n == 0 and any("401909960" in r.getMessage() for r in caplog.records)
+    ids = dict(conn.execute("select game_id, espn_event_id from games").fetchall())
+    assert ids == {"0022600211": "401909960", "0022600212": "401909961"}  # both linked
+    calls = fake_espn.summary_calls
+    ingest_espn_lines(conn, fake_espn, date(2026, 11, 10), date(2026, 11, 10))
+    assert fake_espn.summary_calls == calls  # resume skips the 404 game
+
+
+@pytest.mark.parametrize("status,calls", [(400, 1), (403, 1), (429, 3), (500, 3)])
+@responses.activate
+def test_client_retries_only_transient_errors(monkeypatch, status, calls):
+    from nba_predict.data import espn_client
+    from nba_predict.data.nba_client import IngestError
+
+    monkeypatch.setattr(espn_client.time, "sleep", lambda s: None)
+    responses.get(f"{BASE}/summary", status=status)
+    with pytest.raises(IngestError):
+        EspnClient(delay_s=0).summary("1")
+    assert len(responses.calls) == calls

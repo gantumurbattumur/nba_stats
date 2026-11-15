@@ -16,6 +16,10 @@ from nba_predict.data.nba_client import IngestError
 
 log = logging.getLogger(__name__)
 BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
+
+
+class EspnNotFound(IngestError):
+    """ESPN answered 404/410 for this resource: permanent, not retried."""
 ET = ZoneInfo("America/New_York")
 
 
@@ -92,6 +96,11 @@ class EspnClient:
             time.sleep(self.delay_s)
             try:
                 r = self.session.get(f"{BASE}/{path}", params=params, timeout=self.timeout)
+                if r.status_code in (404, 410):
+                    raise EspnNotFound(f"ESPN {path} {params}: HTTP {r.status_code}")
+                if 400 <= r.status_code < 500 and r.status_code != 429:
+                    # other client errors won't fix themselves on retry
+                    raise IngestError(f"ESPN {path} {params}: HTTP {r.status_code}")
                 r.raise_for_status()
                 return r.json()
             except (requests.RequestException, ValueError) as e:

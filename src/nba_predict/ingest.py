@@ -165,7 +165,7 @@ def ingest_espn_lines(
     have an espn snapshot *or* an ``espn_event_id`` (fetched before, no line) are skipped, and
     dates with nothing to fetch make no calls. Returns snapshots written.
     """
-    from nba_predict.data.espn_client import parse_pickcenter
+    from nba_predict.data.espn_client import EspnNotFound, parse_pickcenter
     from nba_predict.teams import by_espn_abbr
 
     need_sql = "select game_id, home_team_id, away_team_id from games where game_date = ?"
@@ -200,7 +200,13 @@ def ingest_espn_lines(
                 continue
             if not ev["completed"]:
                 continue
-            line = parse_pickcenter(client.summary(ev["espn_event_id"]))
+            try:
+                line = parse_pickcenter(client.summary(ev["espn_event_id"]))
+            except EspnNotFound as e:
+                # permanent gap at the source: link the event (so resume skips it), no line
+                log.warning("ESPN event %s (game %s): summary not found, no line: %s",
+                            ev["espn_event_id"], gid, e)
+                line = None
             conn.execute("update games set espn_event_id = ? where game_id = ?", (ev["espn_event_id"], gid))
             if line is not None:
                 upsert(conn, "odds_snapshots", [dict(
