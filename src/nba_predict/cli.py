@@ -71,3 +71,32 @@ def slate(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), defaul
         "select status, count(*) from games where game_date=? group by status", (d.isoformat(),)
     ).fetchall()
     typer.echo(f"{d}: {n} games on slate; in DB: " + ", ".join(f"{r[0]}={r[1]}" for r in by))
+
+
+@app.command()
+def espn(
+    date_from: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD, default yesterday (ET)")] = None,
+    date_to: Annotated[str | None, typer.Option("--to", help="YYYY-MM-DD, default --from")] = None,
+    refetch: Annotated[bool, typer.Option(help="re-fetch games already fetched")] = False,
+) -> None:
+    """Backfill ESPN past-game closing lines (resumable; ~1 request/s)."""
+    from nba_predict.data.espn_client import EspnClient
+
+    s = get_settings()
+    d0 = _parse_date(date_from, today_et() - dt.timedelta(days=1))
+    d1 = _parse_date(date_to, d0)
+    conn = _conn()
+    try:
+        n = ingest_mod.ingest_espn_lines(conn, EspnClient(delay_s=s.espn_delay_s), d0, d1,
+                                         only_missing=not refetch)
+    except IngestError as e:
+        typer.echo(f"error: {e} (re-run to resume)", err=True)
+        raise typer.Exit(1)
+    r = conn.execute(
+        """select count(*) as games, count(g.espn_event_id) as linked,
+                  sum(exists(select 1 from odds_snapshots o where o.game_id=g.game_id and o.source='espn')) as lined
+           from games g where g.status='final' and g.game_date between ? and ?""",
+        (d0.isoformat(), d1.isoformat()),
+    ).fetchone()
+    typer.echo(f"{d0}..{d1}: wrote {n} ESPN snapshots; final games {r['games']}, "
+               f"linked {r['linked']}, with lines {r['lined'] or 0}")

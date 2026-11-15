@@ -1,0 +1,1587 @@
+{
+ "header": {
+  "id": "401909960",
+  "uid": "s:40~l:46~e:401909960",
+  "season": {
+   "year": 2027,
+   "current": true,
+   "type": 2
+  },
+  "timeValid": true,
+  "competitions": [
+   {
+    "id": "401909960",
+    "uid": "s:40~l:46~e:401909960~c:401909960",
+    "date": "2026-11-11T00:30Z",
+    "neutralSite": false,
+    "conferenceCompetition": false,
+    "boxscoreAvailable": true,
+    "commentaryAvailable": false,
+    "liveAvailable": false,
+    "shotChartAvailable": true,
+    "timeoutsAvailable": true,
+    "possessionArrowAvailable": false,
+    "onWatchESPN": false,
+    "recent": false,
+    "wallclockAvailable": true,
+    "boxscoreSource": "full",
+    "playByPlaySource": "full",
+    "competitors": [
+     {
+      "id": "18",
+      "uid": "s:40~l:46~t:18",
+      "order": 0,
+      "homeAway": "home",
+      "winner": true,
+      "team": {
+       "id": "18",
+       "guid": "61719eb2-11c3-4e3d-90c3-0a1319fd850b",
+       "uid": "s:40~l:46~t:18",
+       "location": "New York",
+       "name": "Knicks",
+       "abbreviation": "NY",
+       "displayName": "New York Knicks",
+       "color": "1d428a",
+       "alternateColor": "f58426",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/ny.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "default"
+         ],
+         "lastUpdated": "2024-06-25T21:17Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/ny.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "dark"
+         ],
+         "lastUpdated": "2024-06-25T21:13Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "scoreboard"
+         ],
+         "lastUpdated": "2024-06-25T21:18Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/scoreboard/ny.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "scoreboard",
+          "dark"
+         ],
+         "lastUpdated": "2024-06-25T21:14Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_on_white_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_white_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_on_black_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_black_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_on_primary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_primary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_on_secondary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_secondary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_black.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_black"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/primary_logo_white.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_white"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_on_white_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_white_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_on_black_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_black_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_on_primary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_primary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_on_secondary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_secondary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_black.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_black"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/61719eb2-11c3-4e3d-90c3-0a1319fd850b/logos/secondary_logo_white.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_white"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        }
+       ],
+       "links": [
+        {
+         "rel": [
+          "clubhouse",
+          "desktop",
+          "team"
+         ],
+         "href": "https://www.espn.com/nba/team/_/name/ny/new-york-knicks",
+         "text": "Clubhouse"
+        }
+       ]
+      },
+      "score": "117",
+      "linescores": [
+       {
+        "displayValue": "26"
+       },
+       {
+        "displayValue": "32"
+       },
+       {
+        "displayValue": "27"
+       },
+       {
+        "displayValue": "32"
+       }
+      ],
+      "record": [
+       {
+        "type": "total",
+        "summary": "6-4",
+        "displayValue": "6-4"
+       },
+       {
+        "type": "home",
+        "summary": "4-2",
+        "displayValue": "4-2"
+       },
+       {
+        "type": "vsconf",
+        "summary": "0-0",
+        "displayValue": "0-0"
+       }
+      ],
+      "possession": false
+     },
+     {
+      "id": "15",
+      "uid": "s:40~l:46~t:15",
+      "order": 1,
+      "homeAway": "away",
+      "winner": false,
+      "team": {
+       "id": "15",
+       "guid": "f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f",
+       "uid": "s:40~l:46~t:15",
+       "location": "Milwaukee",
+       "name": "Bucks",
+       "abbreviation": "MIL",
+       "displayName": "Milwaukee Bucks",
+       "color": "00471b",
+       "alternateColor": "eee1c6",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "default"
+         ],
+         "lastUpdated": "2024-06-25T21:17Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/mil.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "dark"
+         ],
+         "lastUpdated": "2024-06-25T21:13Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mil.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "scoreboard"
+         ],
+         "lastUpdated": "2024-06-25T21:18Z"
+        },
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/scoreboard/mil.png",
+         "width": 500,
+         "height": 500,
+         "alt": "",
+         "rel": [
+          "full",
+          "scoreboard",
+          "dark"
+         ],
+         "lastUpdated": "2024-06-25T21:14Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_on_white_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_white_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_on_black_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_black_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_on_primary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_primary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_on_secondary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_on_secondary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_black.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_black"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/primary_logo_white.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "primary_logo_white"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_on_white_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_white_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_on_black_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_black_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_on_primary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_primary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_on_secondary_color.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_on_secondary_color"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_black.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_black"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        },
+        {
+         "href": "https://a.espncdn.com/guid/f59bbabc-eedb-9ad2-c5dd-9bcd9f450a2f/logos/secondary_logo_white.png",
+         "width": 4096,
+         "height": 4096,
+         "alt": "",
+         "rel": [
+          "full",
+          "secondary_logo_white"
+         ],
+         "lastUpdated": "2026-07-22T20:23Z"
+        }
+       ],
+       "links": [
+        {
+         "rel": [
+          "clubhouse",
+          "desktop",
+          "team"
+         ],
+         "href": "https://www.espn.com/nba/team/_/name/mil/milwaukee-bucks",
+         "text": "Clubhouse"
+        }
+       ]
+      },
+      "score": "85",
+      "linescores": [
+       {
+        "displayValue": "21"
+       },
+       {
+        "displayValue": "13"
+       },
+       {
+        "displayValue": "38"
+       },
+       {
+        "displayValue": "13"
+       }
+      ],
+      "record": [
+       {
+        "type": "total",
+        "summary": "1-10",
+        "displayValue": "1-10"
+       },
+       {
+        "type": "road",
+        "summary": "0-5",
+        "displayValue": "0-5"
+       },
+       {
+        "type": "vsconf",
+        "summary": "0-0",
+        "displayValue": "0-0"
+       }
+      ],
+      "possession": false
+     }
+    ],
+    "status": {
+     "type": {
+      "id": "3",
+      "name": "STATUS_FINAL",
+      "state": "post",
+      "completed": true,
+      "description": "Final",
+      "detail": "Final",
+      "shortDetail": "Final"
+     }
+    },
+    "broadcasts": [
+     {
+      "type": {
+       "id": "1",
+       "shortName": "TV"
+      },
+      "market": {
+       "id": "3",
+       "type": "Away"
+      },
+      "media": {
+       "shortName": "MyMi"
+      },
+      "lang": "en",
+      "region": "us",
+      "isNational": false
+     },
+     {
+      "type": {
+       "id": "4",
+       "shortName": "Streaming"
+      },
+      "market": {
+       "id": "3",
+       "type": "Away"
+      },
+      "media": {
+       "shortName": "Bucks App"
+      },
+      "lang": "en",
+      "region": "us",
+      "isNational": false
+     }
+    ],
+    "series": [
+     {
+      "type": "season",
+      "title": "Regular Season Series",
+      "description": "Regular Season Series",
+      "summary": "NY leads series 1-0",
+      "completed": false,
+      "totalCompetitions": 4,
+      "competitors": [
+       {
+        "id": "18",
+        "uid": "s:40~l:46~t:18",
+        "wins": 1,
+        "ties": 0,
+        "team": {
+         "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/seasons/2027/teams/18?lang=en&region=us"
+        }
+       },
+       {
+        "id": "15",
+        "uid": "s:40~l:46~t:15",
+        "wins": 0,
+        "ties": 0,
+        "team": {
+         "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/seasons/2027/teams/15?lang=en&region=us"
+        }
+       }
+      ],
+      "events": [
+       {
+        "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/events/401909960?lang=en&region=us",
+        "id": "401909960"
+       },
+       {
+        "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/events/401910080?lang=en&region=us",
+        "id": "401910080"
+       },
+       {
+        "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/events/401910629?lang=en&region=us",
+        "id": "401910629"
+       },
+       {
+        "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/events/401910919?lang=en&region=us",
+        "id": "401910919"
+       }
+      ],
+      "startDate": "2026-11-11T00:30Z"
+     }
+    ],
+    "boxscoreMinutes": true
+   }
+  ],
+  "links": [
+   {
+    "rel": [
+     "summary",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/game/_/gameId/401909960/bucks-knicks",
+    "text": "Gamecast",
+    "shortText": "Summary",
+    "isExternal": false,
+    "isPremium": false
+   },
+   {
+    "rel": [
+     "recap",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/recap?gameId=401909960",
+    "text": "Recap",
+    "shortText": "Recap",
+    "isExternal": false,
+    "isPremium": false
+   },
+   {
+    "rel": [
+     "boxscore",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/boxscore/_/gameId/401909960",
+    "text": "Box Score",
+    "shortText": "Box Score",
+    "isExternal": false,
+    "isPremium": false
+   },
+   {
+    "rel": [
+     "pbp",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/playbyplay/_/gameId/401909960",
+    "text": "Play-by-Play",
+    "shortText": "Play-by-Play",
+    "isExternal": false,
+    "isPremium": false
+   },
+   {
+    "rel": [
+     "teamstats",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/matchup?gameId=401909960",
+    "text": "Team Stats",
+    "shortText": "Team Stats",
+    "isExternal": false,
+    "isPremium": false
+   },
+   {
+    "rel": [
+     "videos",
+     "desktop",
+     "event"
+    ],
+    "href": "https://www.espn.com/nba/video?gameId=401909960",
+    "text": "Videos",
+    "shortText": "Videos",
+    "isExternal": false,
+    "isPremium": false
+   }
+  ],
+  "league": {
+   "id": "46",
+   "uid": "s:40~l:46",
+   "name": "National Basketball Association",
+   "abbreviation": "NBA",
+   "shortName": "NBA",
+   "slug": "nba",
+   "isTournament": false,
+   "links": [
+    {
+     "rel": [
+      "index",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/",
+     "text": "Index"
+    },
+    {
+     "rel": [
+      "index",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46",
+     "text": "Index"
+    },
+    {
+     "rel": [
+      "schedule",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/schedule",
+     "text": "Schedule"
+    },
+    {
+     "rel": [
+      "schedule",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=scores",
+     "text": "Schedule"
+    },
+    {
+     "rel": [
+      "standings",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/standings",
+     "text": "Standings"
+    },
+    {
+     "rel": [
+      "standings",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=standings",
+     "text": "Standings"
+    },
+    {
+     "rel": [
+      "rankings",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/rankings",
+     "text": "Rankings"
+    },
+    {
+     "rel": [
+      "rankings",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=rankings",
+     "text": "Rankings"
+    },
+    {
+     "rel": [
+      "scores",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/scoreboard",
+     "text": "Scores"
+    },
+    {
+     "rel": [
+      "scores",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=scores",
+     "text": "Scores"
+    },
+    {
+     "rel": [
+      "stats",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/stats",
+     "text": "Stats"
+    },
+    {
+     "rel": [
+      "stats",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=stats",
+     "text": "Stats"
+    },
+    {
+     "rel": [
+      "teams",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/teams",
+     "text": "Teams"
+    },
+    {
+     "rel": [
+      "athletes",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/players",
+     "text": "Players"
+    },
+    {
+     "rel": [
+      "injuries",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/injuries",
+     "text": "Injuries"
+    },
+    {
+     "rel": [
+      "odds",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/odds",
+     "text": "Odds"
+    },
+    {
+     "rel": [
+      "odds",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=odds",
+     "text": "Odds"
+    },
+    {
+     "rel": [
+      "playoff-bracket",
+      "desktop",
+      "league"
+     ],
+     "href": "https://www.espn.com/nba/playoff-bracket",
+     "text": "Bracket"
+    },
+    {
+     "rel": [
+      "playoff-bracket",
+      "sportscenter",
+      "app",
+      "league"
+     ],
+     "href": "sportscenter://x-callback-url/showClubhouse?uid=s:40~l:46&section=bracket",
+     "text": "Bracket"
+    }
+   ],
+   "logos": [
+    {
+     "href": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
+     "rel": [
+      "full",
+      "default"
+     ]
+    },
+    {
+     "href": "https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500-dark/nba.png&w=500&h=500&transparent=true",
+     "rel": [
+      "full",
+      "dark"
+     ]
+    }
+   ]
+  }
+ },
+ "pickcenter": [
+  {
+   "provider": {
+    "id": "100",
+    "name": "Draft Kings",
+    "priority": 1,
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/betting/Draftkings_Light.svg",
+      "rel": [
+       "light"
+      ]
+     },
+     {
+      "href": "https://a.espncdn.com/i/betting/Draftkings_Dark.svg",
+      "rel": [
+       "dark"
+      ]
+     }
+    ]
+   },
+   "details": "NY -14.5",
+   "overUnder": 221.5,
+   "spread": -14.5,
+   "overOdds": -110.0,
+   "underOdds": -110.0,
+   "awayTeamOdds": {
+    "favorite": false,
+    "underdog": true,
+    "moneyLine": 670,
+    "spreadOdds": -106.0,
+    "team": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/seasons/2027/teams/15?lang=en&region=us"
+    },
+    "teamId": "15",
+    "favoriteAtOpen": false
+   },
+   "homeTeamOdds": {
+    "favorite": true,
+    "underdog": false,
+    "moneyLine": -1040,
+    "spreadOdds": -114.0,
+    "team": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/basketball/leagues/nba/seasons/2027/teams/18?lang=en&region=us"
+    },
+    "teamId": "18",
+    "favoriteAtOpen": true
+   },
+   "moneyline": {
+    "displayName": "Moneyline",
+    "shortDisplayName": "ML",
+    "home": {
+     "close": {
+      "odds": "-1040"
+     },
+     "open": {
+      "odds": "-1260"
+     }
+    },
+    "away": {
+     "close": {
+      "odds": "+670"
+     },
+     "open": {
+      "odds": "+770"
+     }
+    }
+   },
+   "pointSpread": {
+    "displayName": "Spread",
+    "shortDisplayName": "Spread",
+    "home": {
+     "close": {
+      "line": "-14.5",
+      "odds": "-114"
+     },
+     "open": {
+      "line": "-15.5",
+      "odds": "-110"
+     }
+    },
+    "away": {
+     "close": {
+      "line": "+14.5",
+      "odds": "-106"
+     },
+     "open": {
+      "line": "+15.5",
+      "odds": "-110"
+     }
+    }
+   },
+   "total": {
+    "displayName": "Total",
+    "shortDisplayName": "Total",
+    "over": {
+     "close": {
+      "line": "o221.5",
+      "odds": "-110"
+     },
+     "open": {
+      "line": "o219.5",
+      "odds": "-114"
+     }
+    },
+    "under": {
+     "close": {
+      "line": "u221.5",
+      "odds": "-110"
+     },
+     "open": {
+      "line": "u219.5",
+      "odds": "-106"
+     }
+    }
+   },
+   "link": {
+    "text": "See More Odds",
+    "language": "en-US",
+    "rel": [
+     "main",
+     "desktop",
+     "bets"
+    ],
+    "href": "https://sportsbook.draftkings.com",
+    "isExternal": true,
+    "isPremium": false
+   },
+   "header": {
+    "logo": {
+     "dark": "https://a.espncdn.com/i/espnbet/dark/espn-bet-square-off.svg",
+     "light": "https://a.espncdn.com/i/espnbet/espn-bet-square-off.svg",
+     "exclusivesLogoDark": "https://a.espncdn.com/i/espnbet/espn-bet-square-mint.svg",
+     "exclusivesLogoLight": "https://a.espncdn.com/i/espnbet/espn-bet-square-mint.svg"
+    },
+    "text": "Game Odds"
+   },
+   "footer": {
+    "disclaimer": "GAMBLING PROBLEM? CALL 1-800-GAMBLER or 1-800-MY-RESET, (800) 327-5050 or visit gamblinghelplinema.org (MA). Call 877-8-HOPENY/text HOPENY (467369) (NY). Call 888-789-7777/visit ccpg.org (CT), or visit www.mdgamblinghelp.org (MD), 1-800-981-0023 (PR). 21+ and present in most states. (18+ DC/KY/NH/PR/WY). Void in ONT. Eligibility restrictions apply. Terms: draftkings.com/sportsbook. On behalf of Boot Hill Casino (KS). Pass-thru of per wager tax may apply in IL."
+   }
+  }
+ ],
+ "odds": [],
+ "againstTheSpread": [
+  {
+   "team": {
+    "id": "15",
+    "uid": "s:40~l:46~t:15",
+    "displayName": "Milwaukee Bucks",
+    "abbreviation": "MIL",
+    "links": [
+     {
+      "href": "https://www.espn.com/nba/team/_/name/mil/milwaukee-bucks",
+      "text": "Clubhouse"
+     },
+     {
+      "href": "https://www.espn.com/nba/team/schedule/_/name/mil",
+      "text": "Schedule"
+     }
+    ],
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "default"
+      ],
+      "lastUpdated": "2024-06-25T21:17Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/mil.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "dark"
+      ],
+      "lastUpdated": "2024-06-25T21:13Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mil.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "scoreboard"
+      ],
+      "lastUpdated": "2024-06-25T21:18Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/scoreboard/mil.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "scoreboard",
+       "dark"
+      ],
+      "lastUpdated": "2024-06-25T21:14Z"
+     }
+    ]
+   },
+   "records": []
+  },
+  {
+   "team": {
+    "id": "18",
+    "uid": "s:40~l:46~t:18",
+    "displayName": "New York Knicks",
+    "abbreviation": "NY",
+    "links": [
+     {
+      "href": "https://www.espn.com/nba/team/_/name/ny/new-york-knicks",
+      "text": "Clubhouse"
+     },
+     {
+      "href": "https://www.espn.com/nba/team/schedule/_/name/ny",
+      "text": "Schedule"
+     }
+    ],
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/ny.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/ny.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "default"
+      ],
+      "lastUpdated": "2024-06-25T21:17Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/ny.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "dark"
+      ],
+      "lastUpdated": "2024-06-25T21:13Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "scoreboard"
+      ],
+      "lastUpdated": "2024-06-25T21:18Z"
+     },
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500-dark/scoreboard/ny.png",
+      "width": 500,
+      "height": 500,
+      "alt": "",
+      "rel": [
+       "full",
+       "scoreboard",
+       "dark"
+      ],
+      "lastUpdated": "2024-06-25T21:14Z"
+     }
+    ]
+   },
+   "records": []
+  }
+ ],
+ "boxscore": {
+  "teams": [
+   {
+    "team": {
+     "id": "15",
+     "uid": "s:40~l:46~t:15",
+     "slug": "milwaukee-bucks",
+     "location": "Milwaukee",
+     "name": "Bucks",
+     "abbreviation": "MIL",
+     "displayName": "Milwaukee Bucks",
+     "shortDisplayName": "Bucks",
+     "color": "00471b",
+     "alternateColor": "eee1c6",
+     "logo": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png"
+    },
+    "statistics": [
+     {
+      "name": "fieldGoalsMade-fieldGoalsAttempted",
+      "displayValue": "30-79",
+      "label": "FG"
+     },
+     {
+      "name": "fieldGoalPct",
+      "displayValue": "38",
+      "abbreviation": "FG%",
+      "label": "Field Goal %"
+     },
+     {
+      "name": "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+      "displayValue": "16-44",
+      "label": "3PT"
+     },
+     {
+      "name": "threePointFieldGoalPct",
+      "displayValue": "36",
+      "abbreviation": "3P%",
+      "label": "Three Point %"
+     },
+     {
+      "name": "freeThrowsMade-freeThrowsAttempted",
+      "displayValue": "9-10",
+      "label": "FT"
+     },
+     {
+      "name": "freeThrowPct",
+      "displayValue": "90",
+      "abbreviation": "FT%",
+      "label": "Free Throw %"
+     },
+     {
+      "name": "totalRebounds",
+      "displayValue": "32",
+      "abbreviation": "REB",
+      "label": "Rebounds"
+     },
+     {
+      "name": "offensiveRebounds",
+      "displayValue": "7",
+      "abbreviation": "OR",
+      "label": "Offensive Rebounds"
+     },
+     {
+      "name": "defensiveRebounds",
+      "displayValue": "25",
+      "abbreviation": "DR",
+      "label": "Defensive Rebounds"
+     },
+     {
+      "name": "assists",
+      "displayValue": "20",
+      "abbreviation": "AST",
+      "label": "Assists"
+     },
+     {
+      "name": "steals",
+      "displayValue": "7",
+      "abbreviation": "STL",
+      "label": "Steals"
+     },
+     {
+      "name": "blocks",
+      "displayValue": "4",
+      "abbreviation": "BLK",
+      "label": "Blocks"
+     },
+     {
+      "name": "turnovers",
+      "displayValue": "12",
+      "abbreviation": "TO",
+      "label": "Turnovers"
+     },
+     {
+      "name": "teamTurnovers",
+      "displayValue": "2",
+      "abbreviation": "TTO",
+      "label": "Team Turnovers"
+     },
+     {
+      "name": "totalTurnovers",
+      "displayValue": "14",
+      "abbreviation": "ToTO",
+      "label": "Total Turnovers"
+     },
+     {
+      "name": "technicalFouls",
+      "displayValue": "0",
+      "abbreviation": "TECH",
+      "label": "Technical Fouls"
+     },
+     {
+      "name": "totalTechnicalFouls",
+      "displayValue": "0",
+      "abbreviation": "TECH",
+      "label": "Total Technical Fouls"
+     },
+     {
+      "name": "flagrantFouls",
+      "displayValue": "0",
+      "abbreviation": "FLAG",
+      "label": "Flagrant Fouls"
+     },
+     {
+      "name": "turnoverPoints",
+      "displayValue": "25",
+      "abbreviation": "Points Conceded Off Turnovers",
+      "label": "Points Conceded Off Turnovers"
+     },
+     {
+      "name": "fastBreakPoints",
+      "displayValue": "13",
+      "abbreviation": "FBPs",
+      "label": "Fast Break Points"
+     },
+     {
+      "name": "pointsInPaint",
+      "displayValue": "28",
+      "abbreviation": "PIP",
+      "label": "Points in Paint"
+     },
+     {
+      "name": "fouls",
+      "displayValue": "25",
+      "abbreviation": "PF",
+      "label": "Fouls"
+     },
+     {
+      "name": "largestLead",
+      "displayValue": "3",
+      "abbreviation": "LL",
+      "label": "Largest Lead"
+     },
+     {
+      "name": "leadChanges",
+      "displayValue": "7",
+      "abbreviation": "LC",
+      "label": "Lead Changes"
+     },
+     {
+      "name": "leadPercentage",
+      "displayValue": "8",
+      "abbreviation": "LPCT",
+      "label": "Percent Led"
+     }
+    ],
+    "displayOrder": 1,
+    "homeAway": "away"
+   },
+   {
+    "team": {
+     "id": "18",
+     "uid": "s:40~l:46~t:18",
+     "slug": "new-york-knicks",
+     "location": "New York",
+     "name": "Knicks",
+     "abbreviation": "NY",
+     "displayName": "New York Knicks",
+     "shortDisplayName": "Knicks",
+     "color": "1d428a",
+     "alternateColor": "f58426",
+     "logo": "https://a.espncdn.com/i/teamlogos/nba/500/ny.png"
+    },
+    "statistics": [
+     {
+      "name": "fieldGoalsMade-fieldGoalsAttempted",
+      "displayValue": "40-89",
+      "label": "FG"
+     },
+     {
+      "name": "fieldGoalPct",
+      "displayValue": "45",
+      "abbreviation": "FG%",
+      "label": "Field Goal %"
+     },
+     {
+      "name": "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+      "displayValue": "17-44",
+      "label": "3PT"
+     },
+     {
+      "name": "threePointFieldGoalPct",
+      "displayValue": "39",
+      "abbreviation": "3P%",
+      "label": "Three Point %"
+     },
+     {
+      "name": "freeThrowsMade-freeThrowsAttempted",
+      "displayValue": "20-25",
+      "label": "FT"
+     },
+     {
+      "name": "freeThrowPct",
+      "displayValue": "80",
+      "abbreviation": "FT%",
+      "label": "Free Throw %"
+     },
+     {
+      "name": "totalRebounds",
+      "displayValue": "59",
+      "abbreviation": "REB",
+      "label": "Rebounds"
+     },
+     {
+      "name": "offensiveRebounds",
+      "displayValue": "18",
+      "abbreviation": "OR",
+      "label": "Offensive Rebounds"
+     },
+     {
+      "name": "defensiveRebounds",
+      "displayValue": "41",
+      "abbreviation": "DR",
+      "label": "Defensive Rebounds"
+     },
+     {
+      "name": "assists",
+      "displayValue": "26",
+      "abbreviation": "AST",
+      "label": "Assists"
+     },
+     {
+      "name": "steals",
+      "displayValue": "7",
+      "abbreviation": "STL",
+      "label": "Steals"
+     },
+     {
+      "name": "blocks",
+      "displayValue": "3",
+      "abbreviation": "BLK",
+      "label": "Blocks"
+     },
+     {
+      "name": "turnovers",
+      "displayValue": "10",
+      "abbreviation": "TO",
+      "label": "Turnovers"
+     },
+     {
+      "name": "teamTurnovers",
+      "displayValue": "1",
+      "abbreviation": "TTO",
+      "label": "Team Turnovers"
+     },
+     {
+      "name": "totalTurnovers",
+      "displayValue": "11",
+      "abbreviation": "ToTO",
+      "label": "Total Turnovers"
+     },
+     {
+      "name": "technicalFouls",
+      "displayValue": "0",
+      "abbreviation": "TECH",
+      "label": "Technical Fouls"
+     },
+     {
+      "name": "totalTechnicalFouls",
+      "displayValue": "0",
+      "abbreviation": "TECH",
+      "label": "Total Technical Fouls"
+     },
+     {
+      "name": "flagrantFouls",
+      "displayValue": "0",
+      "abbreviation": "FLAG",
+      "label": "Flagrant Fouls"
+     },
+     {
+      "name": "turnoverPoints",
+      "displayValue": "16",
+      "abbreviation": "Points Conceded Off Turnovers",
+      "label": "Points Conceded Off Turnovers"
+     },
+     {
+      "name": "fastBreakPoints",
+      "displayValue": "4",
+      "abbreviation": "FBPs",
+      "label": "Fast Break Points"
+     },
+     {
+      "name": "pointsInPaint",
+      "displayValue": "38",
+      "abbreviation": "PIP",
+      "label": "Points in Paint"
+     },
+     {
+      "name": "fouls",
+      "displayValue": "13",
+      "abbreviation": "PF",
+      "label": "Fouls"
+     },
+     {
+      "name": "largestLead",
+      "displayValue": "32",
+      "abbreviation": "LL",
+      "label": "Largest Lead"
+     },
+     {
+      "name": "leadChanges",
+      "displayValue": "7",
+      "abbreviation": "LC",
+      "label": "Lead Changes"
+     },
+     {
+      "name": "leadPercentage",
+      "displayValue": "87",
+      "abbreviation": "LPCT",
+      "label": "Percent Led"
+     }
+    ],
+    "displayOrder": 2,
+    "homeAway": "home"
+   }
+  ]
+ },
+ "gameInfo": {
+  "venue": {
+   "id": "1830",
+   "guid": "20a70788-c601-3a43-bb71-9cb9eca4be33",
+   "fullName": "Madison Square Garden",
+   "shortName": "Madison Square Garde",
+   "address": {
+    "city": "New York",
+    "state": "NY"
+   },
+   "grass": false,
+   "images": [
+    {
+     "href": "https://a.espncdn.com/i/venues/nba/day/1830.jpg",
+     "width": 2000,
+     "height": 1125,
+     "alt": "",
+     "rel": [
+      "full",
+      "day"
+     ]
+    }
+   ]
+  },
+  "attendance": 19812,
+  "officials": [
+   {
+    "fullName": "Brent Barnaky",
+    "displayName": "Brent Barnaky",
+    "position": {
+     "name": "Referee",
+     "displayName": "Referee",
+     "id": "40"
+    },
+    "order": 1
+   },
+   {
+    "fullName": "Mark Lindsay",
+    "displayName": "Mark Lindsay",
+    "position": {
+     "name": "Referee",
+     "displayName": "Referee",
+     "id": "40"
+    },
+    "order": 2
+   },
+   {
+    "fullName": "Michael Smith",
+    "displayName": "Michael Smith",
+    "position": {
+     "name": "Referee",
+     "displayName": "Referee",
+     "id": "40"
+    },
+    "order": 3
+   }
+  ]
+ },
+ "format": {
+  "regulation": {
+   "periods": 4,
+   "displayName": "Quarter",
+   "slug": "quarter",
+   "clock": 720.0
+  },
+  "overtime": {
+   "displayName": "Quarter",
+   "slug": "quarter",
+   "clock": 300.0
+  }
+ },
+ "meta": {
+  "gp_topic": "gp-basketball-nba-401909960",
+  "gameSwitcherEnabled": true,
+  "picker_topic": "picker-basketball-nba",
+  "lastUpdatedAt": "2026-11-11T02:51:51Z",
+  "firstPlayWallClock": "2026-11-11T00:41:28Z",
+  "lastPlayWallClock": "2026-11-11T02:51:51Z",
+  "gameState": "post",
+  "syncUrl": "https://client.espncdn.com/fauxcast/stats/46/401909960/en/us/"
+ }
+}

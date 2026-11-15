@@ -124,3 +124,49 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     conn.executemany(sql, params)
     conn.commit()
     return len(rows)
+
+
+def ingest_espn_lines(
+    conn: sqlite3.Connection, client, date_from: dt.date, date_to: dt.date, only_missing: bool = True
+) -> int:
+    """Attach ESPN event ids and closing lines to ``games`` for each date in the range.
+
+    Matches events by (ET game_date, home team via ``by_espn_abbr``). Only completed events
+    are fetched (their pickcenter line is the closing line). A fetched game gets
+    ``espn_event_id`` even when ESPN has no line. With ``only_missing``, games that already
+    have an espn snapshot *or* an ``espn_event_id`` (fetched before, no line) are skipped, and
+    dates with nothing to fetch make no calls. Returns snapshots written.
+    """
+    from nba_predict.data.espn_client import parse_pickcenter
+    from nba_predict.teams import by_espn_abbr
+
+    need_sql = "select game_id, home_team_id from games where game_date = ?"
+    if only_missing:
+        need_sql += """ and espn_event_id is null and not exists (
+            select 1 from odds_snapshots o where o.game_id = games.game_id and o.source = 'espn')"""
+    written = 0
+    d = date_from
+    while d <= date_to:
+        ds = d.isoformat()
+        need = {int(r["home_team_id"]): r["game_id"] for r in conn.execute(need_sql, (ds,))}
+        d += dt.timedelta(days=1)
+        if not need:
+            continue
+        for ev in client.events(dt.date.fromisoformat(ds)):
+            team = by_espn_abbr(ev["home_espn_abbr"])
+            if ev["game_date"] != ds or team is None:
+                if team is None:
+                    log.warning("ESPN event %s: unknown home abbr %r", ev["espn_event_id"], ev["home_espn_abbr"])
+                continue
+            gid = need.get(team.nba_id)
+            if gid is None or not ev["completed"]:
+                continue
+            line = parse_pickcenter(client.summary(ev["espn_event_id"]))
+            conn.execute("update games set espn_event_id = ? where game_id = ?", (ev["espn_event_id"], gid))
+            if line is not None:
+                upsert(conn, "odds_snapshots", [dict(
+                    game_id=gid, source="espn", pulled_at=f"{ds}T23:59:59Z", is_closing=1, **line,
+                )], ["game_id", "source", "book", "pulled_at"])
+                written += 1
+            conn.commit()
+    return written
