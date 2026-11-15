@@ -39,21 +39,35 @@ def init_db() -> None:
 @app.command()
 def ingest(
     season: Annotated[list[str] | None, typer.Option("--season", help="e.g. 2026-27; repeatable")] = None,
+    season_type: Annotated[
+        list[str] | None,
+        typer.Option("--season-type", help="regular | playin | playoffs; repeatable (default: all)"),
+    ] = None,
 ) -> None:
-    """Ingest team game logs for one or more seasons (default: current season)."""
+    """Ingest team game logs for one or more seasons (default: current season, all season types)."""
     s = get_settings()
     seasons = season or [s.current_season]
+    label_to_api = {v: k for k, v in ingest_mod.SEASON_TYPES.items()}
+    bad = [t for t in (season_type or []) if t not in label_to_api]
+    if bad:
+        typer.echo(f"error: unknown --season-type {bad}; use regular, playin, playoffs", err=True)
+        raise typer.Exit(2)
+    api_types = tuple(label_to_api[t] for t in season_type) if season_type else tuple(ingest_mod.SEASON_TYPES)
     conn = _conn()
     client = NbaClient(delay_s=s.nba_delay_s)
     for sz in seasons:
         try:
-            n = ingest_mod.ingest_season(conn, client, sz)
+            n = ingest_mod.ingest_season(conn, client, sz, season_types=api_types)
         except IngestError as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
+        by = conn.execute(
+            "select season_type, count(*) from games where season=? and status='final' group by 1 order by 1",
+            (sz,),
+        ).fetchall()
         total = conn.execute("select count(*) from team_games where season=?", (sz,)).fetchone()[0]
-        games = conn.execute("select count(*) from games where season=? and status='final'", (sz,)).fetchone()[0]
-        typer.echo(f"{sz}: wrote {n} team_games rows; {total} team_games / {games} final games in DB")
+        typer.echo(f"{sz}: wrote {n} team_games rows; {total} team_games in DB; final games "
+                   + ", ".join(f"{r[0]}={r[1]}" for r in by))
 
 
 @app.command()

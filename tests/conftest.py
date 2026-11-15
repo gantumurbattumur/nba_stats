@@ -32,12 +32,20 @@ def sample_logs() -> pd.DataFrame:
 
 
 class FakeNbaClient:
+    """``logs`` is served for "Regular Season"; ``other_logs[season_type]`` (default empty)
+    for "PlayIn"/"Playoffs". ``log_calls`` records (season, season_type)."""
+
     def __init__(self, logs: pd.DataFrame):
         self.logs = logs
+        self.other_logs: dict[str, pd.DataFrame] = {}
         self.slate_rows: list[dict] = []
+        self.log_calls: list[tuple[str, str]] = []
 
-    def season_team_logs(self, season: str) -> pd.DataFrame:
-        return self.logs.copy()
+    def season_team_logs(self, season: str, season_type: str = "Regular Season") -> pd.DataFrame:
+        self.log_calls.append((season, season_type))
+        if season_type == "Regular Season":
+            return self.logs.copy()
+        return self.other_logs.get(season_type, pd.DataFrame()).copy()
 
     def slate(self, date) -> list[dict]:
         return list(self.slate_rows)

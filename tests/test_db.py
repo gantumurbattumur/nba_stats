@@ -71,3 +71,32 @@ def test_upsert_is_atomic_across_column_groups(conn):
         upsert(conn, "games", [good, bad], ["game_id"])
     conn.commit()  # a later commit by any caller must not persist the half-written call
     assert conn.execute("select count(*) from games").fetchone()[0] == 0
+
+
+def test_migration_adds_season_type(tmp_path):
+    """A DB created before season_type existed gets the column (default 'regular'),
+    and post-season ids are labelled from their prefix."""
+    import sqlite3
+
+    from nba_predict.db import connect
+
+    p = tmp_path / "old.db"
+    old = sqlite3.connect(p)
+    old.executescript("""
+        CREATE TABLE games (game_id TEXT PRIMARY KEY, season TEXT, game_date TEXT,
+            home_team_id INTEGER, away_team_id INTEGER, home_pts INTEGER, away_pts INTEGER,
+            status TEXT, espn_event_id TEXT);
+        CREATE TABLE team_games (game_id TEXT, team_id INTEGER, opp_team_id INTEGER,
+            season TEXT, game_date TEXT, is_home INTEGER, wl TEXT, PRIMARY KEY (game_id, team_id));
+        INSERT INTO games (game_id, status) VALUES ('0022500001', 'final'), ('0042500101', 'final');
+        INSERT INTO team_games (game_id, team_id) VALUES ('0022500001', 1), ('0052500101', 2);
+    """)
+    old.commit()
+    old.close()
+    c = connect(p)
+    init_schema(c)
+    init_schema(c)  # idempotent
+    assert dict(c.execute("select game_id, season_type from games").fetchall()) == {
+        "0022500001": "regular", "0042500101": "playoffs"}
+    assert dict(c.execute("select game_id, season_type from team_games").fetchall()) == {
+        "0022500001": "regular", "0052500101": "playin"}

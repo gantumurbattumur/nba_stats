@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS games (
     home_pts INTEGER,
     away_pts INTEGER,
     status TEXT,
-    espn_event_id TEXT
+    espn_event_id TEXT,
+    season_type TEXT NOT NULL DEFAULT 'regular'
 );
 CREATE INDEX IF NOT EXISTS ix_games_date ON games(game_date);
 
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS team_games (
     ftm INTEGER, fta INTEGER, oreb INTEGER, dreb INTEGER, reb INTEGER,
     ast INTEGER, stl INTEGER, blk INTEGER, tov INTEGER, pf INTEGER,
     plus_minus REAL,
+    season_type TEXT NOT NULL DEFAULT 'regular',
     PRIMARY KEY (game_id, team_id)
 );
 CREATE INDEX IF NOT EXISTS ix_team_games_team_date ON team_games(team_id, game_date);
@@ -134,8 +136,23 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+# NBA game-id prefix → season_type ('004' playoffs, '005' play-in, else regular)
+SEASON_TYPE_SQL = ("CASE substr(game_id, 1, 3) WHEN '004' THEN 'playoffs' "
+                   "WHEN '005' THEN 'playin' ELSE 'regular' END")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations for DBs created by older versions (idempotent)."""
+    for table in ("games", "team_games"):
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if "season_type" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN season_type TEXT NOT NULL DEFAULT 'regular'")
+            conn.execute(f"UPDATE {table} SET season_type = {SEASON_TYPE_SQL}")
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
 
 

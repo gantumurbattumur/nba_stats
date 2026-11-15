@@ -22,7 +22,7 @@ def test_parse_team_logs_values(sample_logs):
     g = next(x for x in games if x["game_id"] == "0022500001")
     assert g == dict(game_id="0022500001", season="2025-26", game_date="2025-10-21",
                      home_team_id=1610612738, away_team_id=1610612752, home_pts=116,
-                     away_pts=106, status="final")
+                     away_pts=106, status="final", season_type="regular")
     away = next(t for t in tgs if t["game_id"] == "0022500001" and t["is_home"] == 0)
     assert away["team_id"] == 1610612752 and away["opp_team_id"] == 1610612738
     assert away["wl"] == "L" and away["pts"] == 106 and away["plus_minus"] == -10
@@ -224,3 +224,79 @@ def test_slate_skips_preseason_and_all_star(conn, fake_client):
     fake_client.slate_rows = [mk("0012600001"), mk("0032600001"), mk("0022600001")]
     ingest_slate(conn, fake_client, date(2026, 10, 10))
     assert [r[0] for r in conn.execute("select game_id from games")] == ["0022600001"]
+
+
+# --- season types (regular / play-in / playoffs) ---------------------------------------------
+
+def _playoff_logs(sample_logs, prefix="004", gid_suffix="00101"):
+    """Re-label sample game 0022500001 (NYK @ BOS) as a post-season game."""
+    g = sample_logs[sample_logs.GAME_ID == "0022500001"].copy()
+    g["GAME_ID"] = prefix + "25" + gid_suffix
+    g["GAME_DATE"] = "2026-04-20"
+    return g
+
+
+def test_ingest_season_pulls_all_season_types(conn, fake_client, sample_logs):
+    fake_client.other_logs = {"PlayIn": _playoff_logs(sample_logs, "005"),
+                              "Playoffs": _playoff_logs(sample_logs, "004")}
+    assert ingest_season(conn, fake_client, "2025-26") == 10
+    assert [t for _, t in fake_client.log_calls] == ["Regular Season", "PlayIn", "Playoffs"]
+    got = dict(conn.execute("select game_id, season_type from games").fetchall())
+    assert got["0022500001"] == "regular" and got["0052500101"] == "playin"
+    assert got["0042500101"] == "playoffs"
+    tg = conn.execute("select season_type, count(*) from team_games group by 1 order by 1").fetchall()
+    assert [tuple(r) for r in tg] == [("playin", 2), ("playoffs", 2), ("regular", 6)]
+
+
+def test_ingest_season_types_subset_and_empty_logs(conn, fake_client):
+    # no post-season yet: empty frames from nba_api must not crash
+    assert ingest_season(conn, fake_client, "2025-26") == 6
+    fake_client.log_calls.clear()
+    assert ingest_season(conn, fake_client, "2025-26", season_types=("Regular Season",)) == 6
+    assert fake_client.log_calls == [("2025-26", "Regular Season")]
+
+
+def test_parse_sets_season_type(sample_logs):
+    games, tgs = parse_team_logs(sample_logs, "2025-26", season_type="playoffs")
+    assert {g["season_type"] for g in games} == {"playoffs"}
+    assert {t["season_type"] for t in tgs} == {"playoffs"}
+    games, _ = parse_team_logs(sample_logs, "2025-26")
+    assert {g["season_type"] for g in games} == {"regular"}
+
+
+def test_slate_sets_season_type_from_game_id(conn, fake_client):
+    base = dict(game_date="2026-04-20", home_team_id=1610612738, away_team_id=1610612752,
+                status="scheduled")
+    fake_client.slate_rows = [{**base, "game_id": "0042500101"},
+                              {**base, "game_id": "0052500101", "home_team_id": 1610612743},
+                              {**base, "game_id": "0062500001", "home_team_id": 1610612747}]
+    assert ingest_slate(conn, fake_client, date(2026, 4, 20)) == 2  # Cup final (006) skipped
+    got = dict(conn.execute("select game_id, season_type from games").fetchall())
+    assert got == {"0042500101": "playoffs", "0052500101": "playin"}
+
+
+def test_playoff_slate_game_becomes_final_after_ingest(conn, fake_client, sample_logs):
+    fake_client.slate_rows = [dict(game_id="0042500101", game_date="2026-04-20",
+                                   home_team_id=1610612738, away_team_id=1610612752,
+                                   status="scheduled")]
+    ingest_slate(conn, fake_client, date(2026, 4, 20))
+    fake_client.other_logs = {"Playoffs": _playoff_logs(sample_logs, "004")}
+    ingest_season(conn, fake_client, "2025-26")
+    row = conn.execute("select status, season_type, home_pts from games where game_id='0042500101'").fetchone()
+    assert tuple(row) == ("final", "playoffs", 116)
+
+
+def test_client_passes_season_type(monkeypatch, sample_logs):
+    seen = {}
+
+    class Rec:
+        def __init__(self, **k):
+            seen.update(k)
+
+        def get_data_frames(self):
+            return [sample_logs]
+
+    monkeypatch.setattr(nba_client.leaguegamelog, "LeagueGameLog", Rec)
+    monkeypatch.setattr(nba_client.time, "sleep", lambda s: None)
+    NbaClient(delay_s=0).season_team_logs("2024-25", season_type="PlayIn")
+    assert seen["season_type_all_star"] == "PlayIn" and seen["season"] == "2024-25"

@@ -54,11 +54,14 @@ class NbaClient:
                     time.sleep(2**attempt)  # 1s, 2s, 4s, ...
         raise IngestError(f"{what} failed after {self.retries} attempts: {last}")
 
-    def season_team_logs(self, season: str) -> pd.DataFrame:
+    def season_team_logs(self, season: str, season_type: str = "Regular Season") -> pd.DataFrame:
+        """Team game logs; ``season_type`` is nba_api's ``season_type_all_star``
+        ("Regular Season", "PlayIn", "Playoffs")."""
         return self._call(
-            f"LeagueGameLog {season}",
+            f"LeagueGameLog {season} {season_type}",
             lambda: leaguegamelog.LeagueGameLog(
-                season=season, player_or_team_abbreviation="T", timeout=self.timeout
+                season=season, player_or_team_abbreviation="T",
+                season_type_all_star=season_type, timeout=self.timeout,
             ).get_data_frames()[0],
         )
 

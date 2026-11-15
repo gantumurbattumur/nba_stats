@@ -16,6 +16,11 @@ BOX_COLS = ["min", "pts", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "oreb", "d
             "ast", "stl", "blk", "tov", "pf"]
 
 
+# nba_api season_type_all_star → our season_type label
+SEASON_TYPES = {"Regular Season": "regular", "PlayIn": "playin", "Playoffs": "playoffs"}
+_PREFIX_TYPE = {"002": "regular", "004": "playoffs", "005": "playin"}
+
+
 def season_for_date(d: dt.date) -> str:
     """NBA season label for a date: Aug–Dec → 'YYYY-(YY+1)', Jan–Jul → previous year's season."""
     start = d.year if d.month >= 8 else d.year - 1
@@ -35,7 +40,8 @@ def _ambiguous_games(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def parse_team_logs(
-    df: pd.DataFrame, season: str, home_ids: dict[str, int] | None = None
+    df: pd.DataFrame, season: str, home_ids: dict[str, int] | None = None,
+    season_type: str = "regular",
 ) -> tuple[list[dict], list[dict]]:
     """LeagueGameLog team rows → (games rows, team_games rows).
 
@@ -63,11 +69,13 @@ def parse_team_logs(
             game_id=str(gid), season=season, game_date=game_date,
             home_team_id=int(home["TEAM_ID"]), away_team_id=int(away["TEAM_ID"]),
             home_pts=int(home["PTS"]), away_pts=int(away["PTS"]), status="final",
+            season_type=season_type,
         ))
         for row, opp, is_home in ((home, away, 1), (away, home, 0)):
             tg = dict(
                 game_id=str(gid), team_id=int(row["TEAM_ID"]), opp_team_id=int(opp["TEAM_ID"]),
                 season=season, game_date=game_date, is_home=is_home, wl=row["WL"],
+                season_type=season_type,
             )
             tg.update({c: _int(row[c.upper()]) for c in BOX_COLS})
             pm = row["PLUS_MINUS"]
@@ -76,33 +84,43 @@ def parse_team_logs(
     return games, tgs
 
 
-def ingest_season(conn: sqlite3.Connection, client, season: str) -> int:
-    """Fetch and upsert a season's team game logs. Returns team_games rows written.
+def ingest_season(
+    conn: sqlite3.Connection, client, season: str,
+    season_types: tuple[str, ...] = tuple(SEASON_TYPES),
+) -> int:
+    """Fetch and upsert a season's team game logs for each nba_api season type (default:
+    regular season, play-in, playoffs). Returns team_games rows written.
 
     Neutral-site games get their designated home team from ``games`` (if already known) or
     from the scoreboard for that date (one extra call per such date).
     """
-    df = client.season_team_logs(season)
-    home_ids: dict[str, int] = {}
-    amb = _ambiguous_games(df)
-    for gid, gdate in amb.itertuples(index=False):
-        row = conn.execute("select home_team_id from games where game_id=?", (str(gid),)).fetchone()
-        if row and row[0] is not None:
-            home_ids[str(gid)] = int(row[0])
-    for gdate in sorted({str(d)[:10] for g, d in amb.itertuples(index=False) if str(g) not in home_ids}):
-        try:
-            for r in client.slate(dt.date.fromisoformat(gdate)):
-                home_ids[str(r["game_id"])] = int(r["home_team_id"])
-        except Exception as e:  # noqa: BLE001 - lookup is best effort; game is skipped
-            log.warning("home-team lookup for %s failed: %s", gdate, e)
-    games, tgs = parse_team_logs(df, season, home_ids)
-    upsert(conn, "games", games, ["game_id"])
-    return upsert(conn, "team_games", tgs, ["game_id", "team_id"])
+    n = 0
+    for st in season_types:
+        df = client.season_team_logs(season, season_type=st)
+        if df is None or df.empty:
+            continue
+        home_ids: dict[str, int] = {}
+        amb = _ambiguous_games(df)
+        for gid, gdate in amb.itertuples(index=False):
+            row = conn.execute("select home_team_id from games where game_id=?", (str(gid),)).fetchone()
+            if row and row[0] is not None:
+                home_ids[str(gid)] = int(row[0])
+        for gdate in sorted({str(d)[:10] for g, d in amb.itertuples(index=False) if str(g) not in home_ids}):
+            try:
+                for r in client.slate(dt.date.fromisoformat(gdate)):
+                    home_ids[str(r["game_id"])] = int(r["home_team_id"])
+            except Exception as e:  # noqa: BLE001 - lookup is best effort; game is skipped
+                log.warning("home-team lookup for %s failed: %s", gdate, e)
+        games, tgs = parse_team_logs(df, season, home_ids, season_type=SEASON_TYPES[st])
+        upsert(conn, "games", games, ["game_id"])
+        n += upsert(conn, "team_games", tgs, ["game_id", "team_id"])
+    return n
 
 
 # NBA game-id prefixes: 001 preseason, 002 regular season, 003 All-Star, 004 playoffs,
-# 005 play-in, 006 NBA Cup final. Preseason/All-Star never get a regular-season box score.
-_NON_SCORED_PREFIXES = ("001", "003")
+# 005 play-in, 006 NBA Cup final. Only 002/004/005 are ingested with box scores; the Cup final
+# (only in the 'IST' season type, not counted in standings) is skipped like preseason/All-Star.
+_NON_SCORED_PREFIXES = ("001", "003", "006")
 
 
 def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
@@ -113,8 +131,9 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     """
     rows = client.slate(date)
     sql = """
-        INSERT INTO games (game_id, season, game_date, home_team_id, away_team_id, status)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO games (game_id, season, game_date, home_team_id, away_team_id, status,
+                           season_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (game_id) DO UPDATE SET
             game_date = excluded.game_date, home_team_id = excluded.home_team_id,
             away_team_id = excluded.away_team_id, status = excluded.status
@@ -123,12 +142,13 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     params = []
     for r in rows:
         if str(r["game_id"])[:3] in _NON_SCORED_PREFIXES:
-            log.info("slate: skipping preseason/All-Star game %s", r["game_id"])
+            log.info("slate: skipping preseason/All-Star/Cup-final game %s", r["game_id"])
             continue
         status = "scheduled" if r["status"] == "final" else r["status"]
         gdate = r["game_date"]
         params.append((r["game_id"], season_for_date(dt.date.fromisoformat(gdate)), gdate,
-                       r["home_team_id"], r["away_team_id"], status))
+                       r["home_team_id"], r["away_team_id"], status,
+                       _PREFIX_TYPE.get(str(r["game_id"])[:3], "regular")))
     conn.executemany(sql, params)
     conn.commit()
     return len(params)

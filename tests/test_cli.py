@@ -52,3 +52,15 @@ def test_espn_command_no_games_makes_no_calls(cli_db, monkeypatch):
     monkeypatch.setattr(espn_client, "EspnClient", NoNet)
     r = CliRunner().invoke(cli.app, ["espn", "--from", "2026-07-01", "--to", "2026-07-02"])
     assert r.exit_code == 0 and "wrote 0 ESPN snapshots" in r.output
+
+
+def test_ingest_season_type_option(cli_db, monkeypatch, fake_client):
+    monkeypatch.setattr(cli, "NbaClient", lambda **k: fake_client)
+    r = CliRunner().invoke(cli.app, ["ingest", "--season", "2025-26", "--season-type", "playoffs"])
+    assert r.exit_code == 0, r.output
+    assert fake_client.log_calls == [("2025-26", "Playoffs")]
+    r = CliRunner().invoke(cli.app, ["ingest", "--season", "2025-26"])
+    assert r.exit_code == 0 and "regular=3" in r.output
+    assert [t for _, t in fake_client.log_calls[1:]] == ["Regular Season", "PlayIn", "Playoffs"]
+    r = CliRunner().invoke(cli.app, ["ingest", "--season-type", "cup"])
+    assert r.exit_code == 2 and "unknown --season-type" in r.output
