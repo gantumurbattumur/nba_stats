@@ -23,6 +23,7 @@ from nba_predict.analysis.enrich import build_enriched, closing_lines
 from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
 from nba_predict.ingest import season_for_date
+from nba_predict.models.elo import run_elo
 from nba_predict.odds_math import american_to_prob, devig_two_way
 from nba_predict.teams import by_abbr
 
@@ -188,7 +189,8 @@ def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.
         for w in [f"l{n}" for n in windows] + ["szn"]:
             for mkey in METRICS + ["adjnet"]:
                 diffs[f"d_{scope}_{w}_{mkey}"] = out[f"h_{scope}_{w}_{mkey}"] - out[f"a_{scope}_{w}_{mkey}"]
-    out = pd.concat([out, pd.DataFrame(diffs, index=out.index)], axis=1).join(_market(conn)).copy()
+    elo = run_elo(games)[["game_id", "h_elo", "a_elo", "elo_prob"]].set_index("game_id")
+    out = pd.concat([out, pd.DataFrame(diffs, index=out.index)], axis=1).join(_market(conn)).join(elo).copy()
 
     final = out.status == "final"
     out["margin"] = (out.home_pts - out.away_pts).where(final)
