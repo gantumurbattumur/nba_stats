@@ -125,3 +125,38 @@ def status() -> None:
     typer.echo(df.to_string(index=False) if not df.empty else "(no games yet: run `nba ingest`)")
     if df.empty:
         typer.echo("columns: final_games scheduled team_games espn_linked espn_lines fav_disagree")
+
+
+@app.command()
+def explore(
+    preset: Annotated[str | None, typer.Option(help="saved FilterSpec preset name")] = None,
+    team: Annotated[list[str] | None, typer.Option("--team", help="abbr; repeatable")] = None,
+    venue: Annotated[str | None, typer.Option(help="all | home | away")] = None,
+    last_n: Annotated[int | None, typer.Option("--last-n", help="most recent N per team")] = None,
+    season: Annotated[list[str] | None, typer.Option("--season", help="repeatable")] = None,
+    metrics: Annotated[str, typer.Option(help="comma-separated metric keys")] = "record,net,ortg,drtg,pace",
+    group_by: Annotated[str | None, typer.Option("--group-by", help="comma-separated columns")] = None,
+    csv: Annotated[str | None, typer.Option(help="write the table to this CSV path")] = None,
+) -> None:
+    """Filter team_games_enriched and print aggregate metrics."""
+    import pandas as pd
+
+    from nba_predict.analysis.enrich import build_enriched
+    from nba_predict.analysis.filters import FilterSpec, apply_filter, load_preset
+    from nba_predict.analysis.metrics import aggregate
+
+    conn = _conn()
+    spec = load_preset(conn, preset) if preset else FilterSpec()
+    overrides = {k: v for k, v in dict(teams=team, venue=venue, last_n=last_n, seasons=season).items() if v}
+    spec = spec.model_copy(update=overrides)
+    spec = FilterSpec.model_validate(spec.model_dump())  # re-validate overrides
+    try:
+        df = pd.read_sql_query("select * from team_games_enriched", conn)
+    except Exception:  # noqa: BLE001 - table not built yet
+        df = build_enriched(conn)
+    out = aggregate(apply_filter(df, spec), [m.strip() for m in metrics.split(",") if m.strip()],
+                    group_by=[g.strip() for g in group_by.split(",")] if group_by else None)
+    typer.echo(spec.describe())
+    typer.echo(out.to_string(index=False))
+    if csv:
+        out.to_csv(csv, index=False)
