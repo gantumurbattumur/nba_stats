@@ -209,3 +209,33 @@ def ingest_espn_lines(
                 written += 1
             conn.commit()
     return written
+
+
+def coverage(conn: sqlite3.Connection) -> pd.DataFrame:
+    """Per (season, season_type) data coverage for ``nba status``.
+
+    ``fav_disagree`` counts ESPN snapshots whose moneyline favorite (lower ML) is not the
+    spread favorite (negative home_spread = home) — a data-quality signal; pick'ems excluded.
+    """
+    return pd.read_sql_query(
+        """
+        select g.season, g.season_type,
+               sum(g.status = 'final') as final_games,
+               sum(g.status = 'scheduled') as scheduled,
+               sum(g.status = 'postponed') as postponed,
+               (select count(*) from team_games t
+                 where t.season = g.season and t.season_type = g.season_type) as team_games,
+               count(g.espn_event_id) as espn_linked,
+               count(e.game_id) as espn_lines,
+               coalesce(sum(e.home_spread != 0 and e.home_ml is not null and e.away_ml is not null
+                   and ((e.home_spread < 0) != (e.home_ml < e.away_ml))), 0) as fav_disagree
+        from games g
+        left join (select game_id, max(home_spread) as home_spread, max(home_ml) as home_ml,
+                          max(away_ml) as away_ml
+                   from odds_snapshots where source = 'espn' group by game_id) e
+               on e.game_id = g.game_id
+        group by g.season, g.season_type
+        order by g.season, g.season_type
+        """,
+        conn,
+    )

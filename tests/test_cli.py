@@ -64,3 +64,38 @@ def test_ingest_season_type_option(cli_db, monkeypatch, fake_client):
     assert [t for _, t in fake_client.log_calls[1:]] == ["Regular Season", "PlayIn", "Playoffs"]
     r = CliRunner().invoke(cli.app, ["ingest", "--season-type", "cup"])
     assert r.exit_code == 2 and "unknown --season-type" in r.output
+
+
+def test_coverage_and_status(cli_db, conn):
+    from nba_predict.db import upsert
+    from nba_predict.ingest import coverage
+
+    g = dict(season="2026-27", game_date="2026-11-10", home_team_id=1, away_team_id=2,
+             status="final", home_pts=100, away_pts=90)
+    upsert(conn, "games", [
+        {**g, "game_id": "a", "espn_event_id": "1"},
+        {**g, "game_id": "b", "espn_event_id": "2"},
+        {**g, "game_id": "c"},
+        {**g, "game_id": "d", "status": "scheduled", "home_pts": None, "away_pts": None},
+        {**g, "game_id": "e", "season": "2025-26", "season_type": "playoffs"},
+    ], ["game_id"])
+    upsert(conn, "team_games", [dict(game_id="a", team_id=1, season="2026-27"),
+                                dict(game_id="a", team_id=2, season="2026-27")],
+           ["game_id", "team_id"])
+    snap = dict(source="espn", book="DK", pulled_at="t", is_closing=1)
+    upsert(conn, "odds_snapshots", [
+        {**snap, "game_id": "a", "home_spread": -3.5, "home_ml": -160, "away_ml": 135},  # agrees
+        {**snap, "game_id": "b", "home_spread": 1.5, "home_ml": -101, "away_ml": -117},  # agrees
+        {**snap, "game_id": "c", "home_spread": 1.5, "home_ml": -130, "away_ml": 110},   # disagrees
+    ], ["game_id", "source", "book", "pulled_at"])
+    df = coverage(conn).set_index(["season", "season_type"])
+    r = df.loc[("2026-27", "regular")]
+    assert (r.final_games, r.scheduled, r.team_games, r.espn_linked, r.espn_lines,
+            r.fav_disagree) == (3, 1, 2, 2, 3, 1)
+    assert df.loc[("2025-26", "playoffs")].final_games == 1
+
+
+def test_status_command(cli_db):
+    r = CliRunner().invoke(cli.app, ["init-db"])
+    r = CliRunner().invoke(cli.app, ["status"])
+    assert r.exit_code == 0 and "fav_disagree" in r.output and str(cli_db) in r.output

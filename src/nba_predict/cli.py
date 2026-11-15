@@ -114,3 +114,14 @@ def espn(
     ).fetchone()
     typer.echo(f"{d0}..{d1}: wrote {n} ESPN snapshots; final games {r['games']}, "
                f"linked {r['linked']}, with lines {r['lined'] or 0}")
+
+
+@app.command()
+def status() -> None:
+    """Per-season coverage: games, team_games, ESPN links/lines, ML-vs-spread favorite mismatches."""
+    conn = _conn()
+    typer.echo(f"db: {get_settings().db_path}")
+    df = ingest_mod.coverage(conn)
+    typer.echo(df.to_string(index=False) if not df.empty else "(no games yet: run `nba ingest`)")
+    if df.empty:
+        typer.echo("columns: final_games scheduled team_games espn_linked espn_lines fav_disagree")
