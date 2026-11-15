@@ -48,7 +48,7 @@ def _components(e: pd.DataFrame) -> pd.DataFrame:
     for k in ("pts", "opp_pts", "game_poss", "game_min", "fgm", "fg3m", "fga", "tov", "poss",
               "oreb", "opp_dreb", "fta", "margin"):
         c[k] = e[k].astype(float)
-    return c.sort_values(["team_id", "_date"]).reset_index(drop=True)
+    return c.sort_values(["team_id", "_date"], kind="stable").reset_index(drop=True)
 
 
 def _ratio(a, b):
@@ -105,7 +105,7 @@ def _rows_where(cond: pd.Series, a: pd.DataFrame, b) -> pd.DataFrame:
 def _side_features(targets: pd.DataFrame, states: pd.DataFrame, windows, prefix: str) -> pd.DataFrame:
     """targets: game_id, team_id, season, _date → wide window features with ``prefix``."""
     t = targets.sort_values("_date")
-    m = pd.merge_asof(t, states.sort_values("_date"), on="_date", by="team_id",
+    m = pd.merge_asof(t, states.sort_values("_date", kind="stable"), on="_date", by="team_id",
                       allow_exact_matches=False, direction="backward")
     same = m.s_last == m.season
     c = m.c_in.where(same, 0).fillna(0)

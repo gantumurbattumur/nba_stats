@@ -60,7 +60,7 @@ def _schedule(df: pd.DataFrame) -> pd.DataFrame:
 
 def _opp_strength(df: pd.DataFrame) -> pd.DataFrame:
     """Season-to-date record/net/rank of every team *before* each game date."""
-    s = df.sort_values("_date")[["season", "team_id", "_date", "win", "pts", "opp_pts", "game_poss"]].copy()
+    s = df.sort_values("_date", kind="stable")[["season", "team_id", "_date", "win", "pts", "opp_pts", "game_poss"]].copy()
     grp = s.groupby(["season", "team_id"])
     s["c_gp"] = grp.cumcount() + 1
     for c in ("win", "pts", "opp_pts", "game_poss"):
@@ -68,7 +68,7 @@ def _opp_strength(df: pd.DataFrame) -> pd.DataFrame:
     state = s[["season", "team_id", "_date", "c_gp", "c_win", "c_pts", "c_opp_pts", "c_game_poss"]]
     grid = df[["season", "_date"]].drop_duplicates().merge(
         df[["season", "team_id"]].drop_duplicates(), on="season")
-    grid = pd.merge_asof(grid.sort_values("_date"), state.sort_values("_date"), on="_date",
+    grid = pd.merge_asof(grid.sort_values("_date"), state.sort_values("_date", kind="stable"), on="_date",
                          by=["season", "team_id"], allow_exact_matches=False, direction="backward")
     ok = grid["c_gp"] >= OPP_MIN_GP
     grid["win_pct_pre"] = (grid.c_win / grid.c_gp).where(ok)

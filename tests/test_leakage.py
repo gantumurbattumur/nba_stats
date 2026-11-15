@@ -54,3 +54,33 @@ def test_opp_strength_is_strictly_pre_game(fixture_db):
     keep = e1.index[e1.game_date <= D]
     for c in ("opp_win_pct_pre", "opp_net_pre", "opp_net_rank_pre", "rest_days", "b2b"):
         pd.testing.assert_series_equal(e0.loc[keep, c], e1.loc[keep, c], check_dtype=False)
+
+
+def test_two_games_same_date_do_not_see_each_other(fixture_db):
+    # not possible in a real NBA schedule, but a data glitch must not leak: BOS plays a 2nd
+    # game on D; both BOS rows on D get identical pre-game state, and the next game sees both
+    from nba_predict.db import upsert
+
+    bos, lal = 1610612738, 1610612747
+    gid = "0022509999"
+    upsert(fixture_db, "games", [dict(game_id=gid, season="2025-26", game_date=D,
+                                      home_team_id=bos, away_team_id=lal, home_pts=150,
+                                      away_pts=80, status="final", season_type="regular")],
+           ["game_id"])
+    box = dict(min=240, fgm=60, fga=90, fg3m=10, fg3a=30, ftm=20, fta=25, oreb=10, dreb=40,
+               reb=50, ast=30, stl=8, blk=5, tov=10, pf=18)
+    upsert(fixture_db, "team_games", [
+        dict(game_id=gid, team_id=bos, opp_team_id=lal, season="2025-26", game_date=D, is_home=1,
+             wl="W", plus_minus=70.0, season_type="regular", **{**box, "pts": 150}),
+        dict(game_id=gid, team_id=lal, opp_team_id=bos, season="2025-26", game_date=D, is_home=0,
+             wl="L", plus_minus=-70.0, season_type="regular", **{**box, "pts": 80, "fgm": 30}),
+    ], ["game_id", "team_id"])
+    f = build_feature_table(fixture_db)
+    on_d = f[(f.game_date == D) & ((f.home_team_id == bos) | (f.away_team_id == bos))]
+    assert len(on_d) == 2
+    vals = [r[f"{'h' if r.home_team_id == bos else 'a'}_all_l5_net"] for _, r in on_d.iterrows()]
+    gps = [r[f"{'h' if r.home_team_id == bos else 'a'}_gp_szn"] for _, r in on_d.iterrows()]
+    assert vals[0] == pytest.approx(vals[1]) and gps[0] == gps[1]
+    nxt = f[(f.game_date > D) & ((f.home_team_id == bos) | (f.away_team_id == bos))].iloc[0]
+    side = "h" if nxt.home_team_id == bos else "a"
+    assert nxt[f"{side}_gp_szn"] == gps[0] + 2
