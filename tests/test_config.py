@@ -20,7 +20,7 @@ def clean_env(monkeypatch, tmp_path):
 
 def test_defaults(clean_env):
     s = Settings()
-    assert s.windows == (5, 8, 10, 15) and s.edge_threshold == 0.03
+    assert s.windows == (5, 8, 10, 15, 20, 30) and s.edge_threshold == 0.03
     assert s.current_season == "2026-27"
     assert s.train_seasons == ("2023-24", "2024-25", "2025-26")
     assert (s.nba_delay_s, s.espn_delay_s) == (0.6, 1.0)

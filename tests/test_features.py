@@ -215,3 +215,12 @@ def test_load_features_rebuilds_on_windows_and_enriched_change(fixture_db, monke
     fixture_db.commit()
     fb.load_features(fixture_db, windows=(3,))
     assert len(calls) == 2  # closing line changed -> enriched fingerprint changed
+
+
+def test_opener_and_elo_margin_columns(feats):
+    first = feats[feats.game_id == "0022400000"].iloc[0]
+    assert first.h_opener == 1 and first.a_opener == 1
+    s2_open = feats[(feats.season == "2025-26")].sort_values("game_date").iloc[0]
+    assert s2_open.h_opener == 1 and feats.sort_values("game_date").iloc[5].h_opener == 0
+    assert "elo_margin" in feats.columns and feats.elo_margin.notna().all()
+    assert first.elo_margin == pytest.approx(100 / 28)

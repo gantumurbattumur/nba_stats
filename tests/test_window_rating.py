@@ -142,3 +142,41 @@ def test_fit_sigma_is_rms_not_std():
     assert p.sigma == pytest.approx(float(np.sqrt(np.mean(resid ** 2))))
     assert p.sigma_total == pytest.approx(float(np.sqrt(np.mean((df.total - pred.pred_total) ** 2))))
     assert p.sigma_total > 5  # RMS ~6.08; std would say 1.0
+
+
+def test_default_weights_include_long_windows():
+    w = WindowParams().weights
+    assert {"l5", "l10", "l15", "l20", "l30", "szn"} <= set(w) and sum(w.values()) == pytest.approx(1)
+
+
+def test_elo_prior_decays_with_games_played():
+    p = WindowParams(elo_prior_games=5.0)
+    base = _row()  # window margin = hca 2.5
+    rows = [dict(base, game_id=f"g{gp}", elo_margin=10.0, h_gp_szn=gp, a_gp_szn=gp) for gp in (0, 5, 45)]
+    m = predict_rows(pd.DataFrame(rows), p).pred_margin.to_numpy()
+    assert m[0] == pytest.approx(10.0)                       # w = 5/5 = 1
+    assert m[1] == pytest.approx(0.5 * 10 + 0.5 * 2.5)       # w = 5/10
+    assert m[2] == pytest.approx(0.1 * 10 + 0.9 * 2.5)       # w = 5/50
+    no_prior = predict_rows(pd.DataFrame(rows), WindowParams()).pred_margin
+    assert np.allclose(no_prior, 2.5)
+    nan_elo = predict_rows(pd.DataFrame([dict(rows[0], elo_margin=np.nan)]), p).pred_margin.iloc[0]
+    assert nan_elo == pytest.approx(2.5)                     # missing Elo -> no prior
+
+
+def test_fit_learns_elo_prior_when_early_games_follow_elo():
+    rng = np.random.default_rng(3)
+    rows = []
+    for i in range(800):
+        gp = int(rng.integers(0, 40))
+        hn, an, elo = rng.normal(0, 5, 3)
+        w_true = 6 / (6 + gp)
+        r = _row(h={"net": hn, "adjnet": hn}, a={"net": an, "adjnet": an}, h_rest=1, a_rest=1)
+        r.update(game_id=f"g{i}", elo_margin=elo, h_gp_szn=gp, a_gp_szn=gp,
+                 margin=w_true * elo + (1 - w_true) * (hn - an + 2.5) + rng.normal(0, 2),
+                 total=228 + rng.normal(0, 10))
+        rows.append(r)
+    df = pd.DataFrame(rows)
+    p = fit(df)
+    assert 3 < p.elo_prior_games < 12
+    off = fit(df, WindowParams(fit_elo_prior=False))
+    assert off.elo_prior_games == 0 and off.sigma > p.sigma

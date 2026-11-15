@@ -21,6 +21,9 @@ def project_root() -> Path:
 
 
 ROOT = project_root()
+# user asked for 5/8/10/15; 20/30 added after the Phase-2 analysis (predictive power keeps
+# rising to L20-L30). Any N works anywhere.
+DEFAULT_WINDOWS = (5, 8, 10, 15, 20, 30)
 ENV_FILE = ROOT / ".env"
 
 
@@ -30,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     db_path: str = "data/nba.db"
-    windows: tuple[int, ...] = (5, 8, 10, 15)
+    windows: tuple[int, ...] = DEFAULT_WINDOWS
     edge_threshold: float = 0.03
     current_season: str = "2026-27"
     train_seasons: tuple[str, ...] = ("2023-24", "2024-25", "2025-26")

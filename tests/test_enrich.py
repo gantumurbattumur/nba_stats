@@ -183,3 +183,10 @@ def test_rest_days_never_negative_on_same_date_glitch(fixture_db):
     assert (e.rest_days >= 0).all()
     f = build_feature_table(fixture_db)
     assert (f.h_rest >= 0).all() and (f.a_rest >= 0).all()
+
+
+def test_is_opener(enriched):
+    b = _bos(enriched)
+    assert list(b.is_opener[:2]) == [True, False]
+    assert b.is_opener.sum() == 2  # one per season
+    assert (enriched[enriched.is_opener.astype(bool)].rest_days == 7).all()

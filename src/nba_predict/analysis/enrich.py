@@ -54,6 +54,7 @@ def _schedule(df: pd.DataFrame) -> pd.DataFrame:
     rest = (d - prev).dt.days - 1
     df["rest_days"] = rest.clip(lower=0, upper=7).fillna(7).astype(int)  # >= 0 even for same-date glitches
     df["b2b"] = df["rest_days"] == 0
+    df["is_opener"] = prev.isna()  # season opener: rest_days is 7 by convention, not real rest
     df["three_in_four"] = (d - g.shift(2)).dt.days.le(3).fillna(False).astype(bool)
     return df
 

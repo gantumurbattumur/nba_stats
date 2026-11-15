@@ -3,7 +3,8 @@
 Every feature for a game on date D uses only the team's final games with ``game_date < D``.
 Columns: ``{side}_{scope}_{win}_{metric}`` with side ∈ {h, a}, scope ∈ {all, split} (split =
 home team's home games / away team's road games), win ∈ {l<N>..., szn}; plus ``_gp`` and
-``_adjnet`` (= net + sos), diffs ``d_* = h − a``, schedule, market (closing) and targets.
+``_adjnet`` (= net + sos), diffs ``d_* = h − a``, schedule (rest, b2b, 3in4, opener), Elo (h_elo, a_elo, elo_prob, elo_margin), market (closing)
+and targets.
 
 Window rule: ``szn`` is season-to-date only. ``l<N>`` windows reach back into the previous
 season while the team has fewer than ``CROSS_SEASON_GAMES`` prior in-season games in that
@@ -24,6 +25,7 @@ import pandas as pd
 from nba_predict.analysis.enrich import closing_lines, load_enriched, source_fingerprint
 from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
+from nba_predict.config import DEFAULT_WINDOWS
 from nba_predict.ingest import season_for_date
 from nba_predict.models.elo import run_elo
 from nba_predict.odds_math import american_to_prob, devig_two_way
@@ -132,10 +134,11 @@ def _schedule(games: pd.DataFrame) -> pd.DataFrame:
     grp = long.groupby(["team_id", "season"])["_date"]
     long["rest"] = ((long._date - grp.shift(1)).dt.days - 1).clip(lower=0, upper=7).fillna(7).astype(int)
     long["b2b"] = (long.rest == 0).astype(int)
+    long["opener"] = grp.shift(1).isna().astype(int)  # first game of the team's season (rest=7)
     long["3in4"] = (long._date - grp.shift(2)).dt.days.le(3).fillna(False).astype(int)
     out = {}
     for side in ("h", "a"):
-        s = long[long.side == side].set_index("game_id")[["rest", "b2b", "3in4"]]
+        s = long[long.side == side].set_index("game_id")[["rest", "b2b", "3in4", "opener"]]
         out[side] = s.add_prefix(f"{side}_")
     return out["h"].join(out["a"], how="outer")
 
@@ -157,7 +160,7 @@ def _market(conn: sqlite3.Connection) -> pd.DataFrame:
     return m
 
 
-def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.DataFrame:
+def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataFrame:
     windows = tuple(int(w) for w in windows)
     e = load_enriched(conn)
     fp = features_fingerprint(conn, windows)  # after enriched is fresh; before reading games
@@ -185,7 +188,7 @@ def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.
         for w in [f"l{n}" for n in windows] + ["szn"]:
             for mkey in METRICS + ["adjnet"]:
                 diffs[f"d_{scope}_{w}_{mkey}"] = out[f"h_{scope}_{w}_{mkey}"] - out[f"a_{scope}_{w}_{mkey}"]
-    elo = run_elo(games)[["game_id", "h_elo", "a_elo", "elo_prob"]].set_index("game_id")
+    elo = run_elo(games)[["game_id", "h_elo", "a_elo", "elo_prob", "elo_margin"]].set_index("game_id")
     out = pd.concat([out, pd.DataFrame(diffs, index=out.index)], axis=1).join(_market(conn)).join(elo).copy()
 
     final = out.status == "final"
@@ -215,7 +218,7 @@ def features_fingerprint(conn: sqlite3.Connection, windows) -> str:
     return json.dumps([source_fingerprint(conn), h.hexdigest(), [int(w) for w in windows]])
 
 
-def load_features(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.DataFrame:
+def load_features(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataFrame:
     """``game_features`` if built from the current sources with these windows, else rebuild
     (which also rebuilds a stale ``team_games_enriched``)."""
     row = conn.execute("select fingerprint from derived_meta where name = 'game_features'").fetchone()
