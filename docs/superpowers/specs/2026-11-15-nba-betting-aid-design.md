@@ -28,7 +28,7 @@ Success means:
 - **Past-game odds: ESPN's unofficial API** (free, no key). Verified 2026-11-15:
   - `site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=YYYYMMDD` lists event ids.
   - `…/summary?event=ID` → `pickcenter[0]` contains `spread`, `overUnder`, `overOdds`/`underOdds`, and `homeTeamOdds`/`awayTeamOdds.moneyLine`/`spreadOdds`.
-  - Coverage: the **DraftKings** line for 2025-26 and 2026-27; a "consensus" line for 2022-23 and earlier; **nothing for 2023-24 or 2024-25**.
+  - Coverage: the **DraftKings** line for 2025-26 (**from 2025-11-24 only**: 979/1230 regular-season games; Agent B, 2026-11-15) and 2026-27; a "consensus" line for 2022-23 and earlier; **nothing for 2023-24 or 2024-25**.
   - That gives every team's last 5/10/15 games with lines, all of last season, and a real against-the-odds backtest on 2025-26.
   - It costs one call per game (about 1230 a season). Backfill once at about 1 request per second and cache it. After that, pull only new games each day.
   - The data is unofficial, so the parser must cope with missing fields. Games with no line are stored with no odds, not dropped.
