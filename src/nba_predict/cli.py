@@ -155,3 +155,23 @@ def explore(
     typer.echo(out.to_string(index=False))
     if csv:
         out.to_csv(csv, index=False)
+
+
+@app.command()
+def features(
+    windows: Annotated[str | None, typer.Option(help="comma-separated window sizes, default settings.windows")] = None,
+) -> None:
+    """Rebuild team_games_enriched and game_features (always, regardless of fingerprints)."""
+    import time
+
+    from nba_predict.analysis.enrich import build_enriched
+    from nba_predict.features.build import build_feature_table
+
+    s = get_settings()
+    wins = tuple(int(w) for w in windows.split(",")) if windows else s.windows
+    conn = _conn()
+    t = time.monotonic()
+    e = build_enriched(conn)
+    f = build_feature_table(conn, wins)
+    typer.echo(f"team_games_enriched: {len(e)} rows; game_features: {len(f)} rows x {f.shape[1]} cols "
+               f"(windows {','.join(map(str, wins))}) in {time.monotonic() - t:.1f}s")

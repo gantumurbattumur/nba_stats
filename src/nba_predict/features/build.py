@@ -14,12 +14,14 @@ Post-season games are part of the same date-ordered sequence as regular-season g
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import sqlite3
 
 import numpy as np
 import pandas as pd
 
-from nba_predict.analysis.enrich import closing_lines, load_enriched
+from nba_predict.analysis.enrich import closing_lines, load_enriched, source_fingerprint
 from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
 from nba_predict.ingest import season_for_date
@@ -158,6 +160,7 @@ def _market(conn: sqlite3.Connection) -> pd.DataFrame:
 def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.DataFrame:
     windows = tuple(int(w) for w in windows)
     e = load_enriched(conn)
+    fp = features_fingerprint(conn, windows)  # after enriched is fresh; before reading games
     games = pd.read_sql_query(
         "select game_id, season, season_type, game_date, status, home_team_id, away_team_id, "
         "home_pts, away_pts from games", conn)
@@ -192,8 +195,35 @@ def build_feature_table(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.
     out = out.drop(columns=["home_pts", "away_pts"]).reset_index().sort_values(
         ["game_date", "game_id"]).reset_index(drop=True)
     out.to_sql("game_features", conn, if_exists="replace", index=False)
+    conn.execute(
+        "insert into derived_meta (name, fingerprint, built_at) values ('game_features', ?, ?) "
+        "on conflict (name) do update set fingerprint = excluded.fingerprint, built_at = excluded.built_at",
+        (fp, dt.datetime.now(dt.UTC).isoformat(timespec="seconds")))
     conn.commit()
     return out
+
+
+def features_fingerprint(conn: sqlite3.Connection, windows) -> str:
+    """Signature of what ``game_features`` derives from: the enriched sources, every game row
+    (ids, dates, teams, status, scores — so new/rescheduled/postponed/finished games count)
+    and the windows."""
+    h = hashlib.sha256()
+    for r in conn.execute(
+            "select game_id, game_date, status, home_team_id, away_team_id, home_pts, away_pts, "
+            "season, season_type from games order by game_id"):
+        h.update(repr(tuple(r)).encode())
+    return json.dumps([source_fingerprint(conn), h.hexdigest(), [int(w) for w in windows]])
+
+
+def load_features(conn: sqlite3.Connection, windows=(5, 8, 10, 15)) -> pd.DataFrame:
+    """``game_features`` if built from the current sources with these windows, else rebuild
+    (which also rebuilds a stale ``team_games_enriched``)."""
+    row = conn.execute("select fingerprint from derived_meta where name = 'game_features'").fetchone()
+    exists = conn.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'game_features'").fetchone()
+    if exists and row and row[0] == features_fingerprint(conn, windows):
+        return pd.read_sql_query("select * from game_features", conn)
+    return build_feature_table(conn, windows)
 
 
 def team_profile(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int | None,

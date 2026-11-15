@@ -160,3 +160,58 @@ def build_enriched_without_glitch(conn, gid):
     conn.execute("update team_games set min = 240 where game_id = ?", (gid,))
     conn.commit()
     return build_enriched(conn)
+
+
+# --- staleness of game_features (derived_meta fingerprint) -----------------------------------
+
+def _spy_builds(monkeypatch):
+    calls = []
+    real = fb.build_feature_table
+
+    def spy(conn, windows=(5, 8, 10, 15)):
+        calls.append(tuple(windows))
+        return real(conn, windows)
+
+    monkeypatch.setattr(fb, "build_feature_table", spy)
+    return calls
+
+
+def test_load_features_reuses_when_fresh(fixture_db, monkeypatch):
+    build_feature_table(fixture_db)
+    calls = _spy_builds(monkeypatch)
+    f = fb.load_features(fixture_db)
+    assert calls == [] and len(f) == 50
+
+
+def test_load_features_rebuilds_on_new_scheduled_game(fixture_db, monkeypatch):
+    from nba_predict.db import upsert
+
+    build_feature_table(fixture_db)
+    calls = _spy_builds(monkeypatch)
+    upsert(fixture_db, "games", [dict(game_id="0022599999", season="2025-26", game_date="2025-11-11",
+                                      home_team_id=1610612747, away_team_id=BOS, status="scheduled")],
+           ["game_id"])
+    f = fb.load_features(fixture_db)
+    assert len(calls) == 1 and "0022599999" in set(f.game_id)
+    fb.load_features(fixture_db)
+    assert len(calls) == 1  # fresh again
+
+
+def test_load_features_rebuilds_on_status_or_score_change(fixture_db, monkeypatch):
+    build_feature_table(fixture_db)
+    calls = _spy_builds(monkeypatch)
+    fixture_db.execute("update games set status = 'postponed' where game_id = '0022599000'")
+    fixture_db.commit()
+    fb.load_features(fixture_db)
+    assert len(calls) == 1
+
+
+def test_load_features_rebuilds_on_windows_and_enriched_change(fixture_db, monkeypatch):
+    build_feature_table(fixture_db)
+    calls = _spy_builds(monkeypatch)
+    f = fb.load_features(fixture_db, windows=(3,))
+    assert calls == [(3,)] and "h_all_l3_net" in f.columns
+    fixture_db.execute("update odds_snapshots set total = total + 1 where rowid = 1")
+    fixture_db.commit()
+    fb.load_features(fixture_db, windows=(3,))
+    assert len(calls) == 2  # closing line changed -> enriched fingerprint changed

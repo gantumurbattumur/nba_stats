@@ -99,3 +99,28 @@ def test_status_command(cli_db):
     r = CliRunner().invoke(cli.app, ["init-db"])
     r = CliRunner().invoke(cli.app, ["status"])
     assert r.exit_code == 0 and "fav_disagree" in r.output and str(cli_db) in r.output
+
+
+def test_features_command_always_rebuilds(cli_db, monkeypatch):
+    import sqlite3 as sq
+
+    import conftest
+    from nba_predict.analysis import enrich
+    from nba_predict.db import connect, init_schema
+    from nba_predict.features import build
+
+    c = connect(cli_db)
+    init_schema(c)
+    conftest.build_league(c)
+    c.close()
+    calls = []
+    real_e, real_f = enrich.build_enriched, build.build_feature_table
+    monkeypatch.setattr(enrich, "build_enriched", lambda conn: calls.append("e") or real_e(conn))
+    monkeypatch.setattr(build, "build_feature_table",
+                        lambda conn, w=(5, 8, 10, 15): calls.append(("f", w)) or real_f(conn, w))
+    for _ in range(2):
+        r = CliRunner().invoke(cli.app, ["features", "--windows", "5,10"])
+        assert r.exit_code == 0, r.output
+        assert "game_features: 50 rows" in r.output
+    assert calls == ["e", ("f", (5, 10)), "e", ("f", (5, 10))]
+    assert "h_all_l10_net" in {r[1] for r in sq.connect(cli_db).execute("pragma table_info(game_features)")}
