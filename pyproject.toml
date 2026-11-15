@@ -1,0 +1,38 @@
+[project]
+name = "nba-predict"
+version = "0.1.0"
+description = "NBA stats & odds analysis (data-engineering showcase; analysis only)"
+readme = "README.md"
+authors = [
+    { name = "Gantumur Battumur", email = "gantumurq@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "nba-api>=1.12.0",
+    "numpy>=2.5.4",
+    "pandas>=3.1.1",
+    "plotly>=7.1.0",
+    "pydantic>=2.14.3",
+    "pydantic-settings>=2.16.3",
+    "requests>=2.34.2",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+    "streamlit>=1.67.0",
+    "typer>=0.29.1",
+]
+
+[project.scripts]
+nba = "nba_predict.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "responses>=0.26.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
