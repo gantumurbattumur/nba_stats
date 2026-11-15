@@ -1,10 +1,10 @@
-# NBA Betting Aid Implementation Plan
+# NBA Stats & Odds Analysis Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A local tool that ingests NBA stats and odds, predicts today's games from recent form/splits/rest/Elo, flags value vs the market, logs and grades picks, and exposes every data stage through free-form filters, SQL and custom features in a Streamlit dashboard.
+**Goal:** A local tool that ingests NBA stats and odds, predicts today's games from recent form/splits/rest/Elo, flags model-vs-market disagreements, logs and grades those flags, and exposes every data stage through free-form filters, SQL and custom features in a Streamlit dashboard.
 
-**Architecture:** One Python package `nba_predict` (src layout) writing to one SQLite file. Pipeline stages each materialize a table (`games`/`team_games` → `team_games_enriched` → `game_features` → `predictions` → `picks`) so the dashboard can show any stage. One `FilterSpec` drives the dashboard, CLI and model playground.
+**Architecture:** One Python package `nba_predict` (src layout) writing to one SQLite file. Pipeline stages each materialize a table (`games`/`team_games` → `team_games_enriched` → `game_features` → `predictions` → `value_flags`) so the dashboard can show any stage. One `FilterSpec` drives the dashboard, CLI and model playground.
 
 **Tech Stack:** Python 3.12 (uv), nba_api, requests, pandas, numpy, scipy, scikit-learn, pydantic / pydantic-settings, typer, streamlit, plotly, pytest, responses (HTTP mocking).
 
@@ -15,7 +15,8 @@
 - Python `>=3.12` via `uv python pin 3.12` (system python is 3.9 — never use it). Run everything with `uv run`.
 - Package `nba_predict` under `src/`; CLI entry point `nba = "nba_predict.cli:app"`.
 - DB path from setting `db_path`, default `data/nba.db`; `data/*.db` and `.env` are gitignored.
-- Settings (pydantic-settings, env prefix `NBA_`, plus `ODDS_API_KEY` unprefixed): `windows=(5, 8, 10, 15)`, `edge_threshold=0.03`, `kelly_fraction=0.25`, `max_stake_pct=0.05`, `bankroll=1000.0`, `current_season="2026-27"`, `train_seasons=("2023-24","2024-25","2025-26")`, `nba_delay_s=0.6`, `espn_delay_s=1.0`.
+- Settings (pydantic-settings, env prefix `NBA_`, plus `ODDS_API_KEY` unprefixed): `windows=(5, 8, 10, 15)`, `edge_threshold=0.03`, `current_season="2026-27"`, `train_seasons=("2023-24","2024-25","2025-26")`, `nba_delay_s=0.6`, `espn_delay_s=1.0`.
+- **Analysis only — data-engineering showcase.** No bankroll, stake sizing, Kelly, bet placement, or connection to any bank, wallet or sportsbook account, anywhere (code, settings, UI, docs). "Value flags" are model-vs-market disagreements; "1-unit ROI" is a model-evaluation metric only.
 - Odds API call is exactly `GET https://api.the-odds-api.com/v4/sports/basketball_nba/odds` with `regions=us`, `markets=h2h,spreads,totals`, `oddsFormat=american`. Never call the historical endpoint.
 - ESPN: `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=YYYYMMDD` and `.../summary?event=ID`, lines from `pickcenter[0]`. ESPN `spread` is from the **home** team's perspective (negative = home favored).
 - No leakage: any feature for a game on date D uses only games with `game_date < D`.
@@ -25,10 +26,24 @@
 - User-supplied SQL (console and custom features) runs only through `db.readonly_query`.
 - Commit after every task; messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
+## Agent Workflow (user-directed, 2026-11-15)
+
+Three agents work on branch `dev`, in four phases. Phase 1 = Tasks 1–4, Phase 2 = Tasks 5–10, Phase 3 = Tasks 11–13, Phase 4 = Tasks 14–16.
+
+| Agent | Role | Writes | Never |
+|---|---|---|---|
+| **A — Builder** | Implements the phase's tasks test-first, one commit per task. At the start of each phase after the first, reviews C's fixes from the previous phase. | `src/`, `tests/`, `app/`, root config | edits reports of B/C |
+| **B — Analyst** | Runs the real pipeline for what exists (ingest, ESPN backfill, features, backtest, explore), sanity-checks the data (row counts, home win rate, spread sign, line coverage, leakage spot checks), writes findings with the exact SQL/commands used. Reports bugs to C. | `docs/reports/phase-N-B-analysis.md`, `data/` | edits `src/`/`tests/`; commits |
+| **C — Tester/Debugger** | Runs the full suite, reviews A's diff against this plan, adds missing edge-case tests, fixes bugs (incl. B's), re-runs 2–3 of B's queries to confirm B's numbers. | `tests/`, fixes in `src/`/`app/` (commits `fix:`/`test:`), `docs/reports/phase-N-C-review.md` | edits B's report |
+
+Cross-checks: C reviews A's code · A reviews C's fixes · C verifies B's numbers · B's data findings feed C's debugging. The coordinator commits reports.
+
+**Every agent report ends with a `## Next` section holding at least one concrete suggested new feature or one bug fix.**
+
 ## Review Focus
 
 1. **Too few prior games** (season start, or N larger than games played): stats compute over the games available, a `gp` count is shown, nothing crashes or becomes all-NaN. → tests in Task 7 (`test_short_history_uses_available_games`) and Task 9 (`test_predict_with_two_prior_games`).
-2. **Game with no odds** (ESPN gap 2023-25, Odds API missing a game, unmapped team name): prediction still produced and shown, edge columns empty, no pick flagged. → Task 4 (`test_summary_without_pickcenter`), Task 12 (`test_unmapped_team_skipped_with_warning`), Task 13 (`test_no_odds_no_pick`).
+2. **Game with no odds** (ESPN gap 2023-25, Odds API missing a game, unmapped team name): prediction still produced and shown, edge columns empty, nothing flagged. → Task 4 (`test_summary_without_pickcenter`), Task 12 (`test_unmapped_team_skipped_with_warning`), Task 13 (`test_no_odds_no_flag`).
 3. **Odds API key missing/invalid/quota exhausted** (missing key, 401, 429): `nba daily` prints a clear message and still writes predictions. → Task 12 (`test_quota_exhausted_raises_clean_error`), Task 13 (`test_daily_without_odds_key`).
 4. **UTC vs Eastern date boundary and postponed games**: a 10:30pm ET tip (next-day UTC) matches the right game; postponed/unfinished games are never graded. → Task 12 (`test_late_tip_matches_eastern_date`), Task 13 (`test_grade_skips_unfinished`).
 5. **Filter that matches nothing**: Explorer/Data/aggregate return empty frames and the page shows an empty-state message. → Task 6 (`test_empty_result`), Task 15 (AppTest with impossible filter).
@@ -54,7 +69,7 @@ src/nba_predict/
   analysis/custom.py   custom feature CRUD + evaluation
   features/build.py    build_feature_table(), team_profile()
   models/elo.py, models/window_rating.py, models/ml.py
-  backtest.py, predict.py, picks.py, cli.py
+  backtest.py, predict.py, flags.py, cli.py
 app/dashboard.py, app/components/{data.py,sidebar.py}, app/pages/*.py
 tests/conftest.py (fixture DB factory), tests/fixtures/*.json, tests/test_*.py
 ```
@@ -68,7 +83,7 @@ tests/conftest.py (fixture DB factory), tests/fixtures/*.json, tests/test_*.py
 | `odds_snapshots` | `id` INT PK AUTOINC, `game_id`, `source` (`espn`/`oddsapi`), `book`, `pulled_at` ISO UTC, `is_closing` INT, `home_ml`, `away_ml`, `home_spread`, `home_spread_price`, `away_spread_price`, `total`, `over_price`, `under_price` (all nullable); UNIQUE(`game_id`,`source`,`book`,`pulled_at`) |
 | `api_usage` | `id` PK, `at`, `source`, `credits_used` INT, `credits_remaining` INT |
 | `predictions` | `id` PK, `game_id`, `model`, `created_at`, `home_win_prob`, `pred_margin` (home−away), `pred_total`, `params_json`; UNIQUE(`game_id`,`model`) — re-predict replaces |
-| `picks` | `id` PK, `game_id`, `created_at`, `model`, `market` (`ml`/`spread`/`total`), `side` (`home`/`away`/`over`/`under`), `line` NULL, `price` INT, `book`, `model_prob`, `market_prob`, `edge`, `stake`, `result` NULL (`win`/`loss`/`push`), `profit` NULL, `closing_line` NULL, `closing_price` NULL, `clv` NULL; UNIQUE(`game_id`,`market`,`side`) |
+| `value_flags` | `id` PK, `game_id`, `created_at`, `model`, `market` (`ml`/`spread`/`total`), `side` (`home`/`away`/`over`/`under`), `line` NULL, `price` INT, `book`, `model_prob`, `market_prob`, `edge`, `result` NULL (`win`/`loss`/`push`), `units` NULL (1-unit return, evaluation only), `closing_line` NULL, `closing_price` NULL, `clv` NULL; UNIQUE(`game_id`,`market`,`side`) |
 | `filter_presets` | `name` PK, `spec_json`, `created_at` |
 | `custom_features` | `name` PK, `expression`, `use_in_model` INT, `created_at` |
 | `backtest_results` | `run_at`, `model`, `season`, `metric`, `value` |
@@ -103,7 +118,7 @@ Odds are stored wide (one row per book per pull) rather than long per market —
 def test_schema_idempotent(conn):
     init_schema(conn); init_schema(conn)
     names = {r[0] for r in conn.execute("select name from sqlite_master where type='table'")}
-    assert {"games","team_games","odds_snapshots","api_usage","predictions","picks",
+    assert {"games","team_games","odds_snapshots","api_usage","predictions","value_flags",
             "filter_presets","custom_features","backtest_results"} <= names
 
 def test_upsert_updates_not_duplicates(conn):
@@ -142,9 +157,7 @@ def test_lookups():
   - `american_to_prob(odds: int) -> float`
   - `american_to_decimal(odds: int) -> float`
   - `devig_two_way(p_a: float, p_b: float) -> tuple[float, float]` (normalize to sum 1)
-  - `kelly_fraction(prob: float, odds: int) -> float` (full Kelly, clipped to ≥0)
-  - `stake(prob, odds, bankroll, fraction=0.25, max_pct=0.05) -> float` (`bankroll * min(fraction*kelly, max_pct)`, rounded to 2 dp)
-  - `profit(odds: int, stake: float, result: Literal['win','loss','push']) -> float`
+  - `unit_return(odds: int, result: Literal['win','loss','push']) -> float` (return of a hypothetical 1-unit flag, for evaluation only)
   - `consensus_novig(pairs: list[tuple[int,int]]) -> tuple[float,float] | None` (median of per-book no-vig probs; `None` if empty)
   - `best_price(prices: list[int]) -> int` (highest decimal payout)
 
@@ -161,16 +174,10 @@ def test_devig():
     a, b = devig_two_way(american_to_prob(-150), american_to_prob(130))
     assert a + b == pytest.approx(1.0) and a > 0.58
 
-def test_kelly_and_stake():
-    assert kelly_fraction(0.55, -110) == pytest.approx(0.055)
-    assert kelly_fraction(0.40, -110) == 0.0
-    assert stake(0.55, -110, 1000) == pytest.approx(13.75)   # 1000*0.25*0.055
-    assert stake(0.90, 200, 1000) == 50.0                    # capped at 5%
-
-def test_profit():
-    assert profit(-110, 110, "win") == pytest.approx(100)
-    assert profit(150, 100, "win") == pytest.approx(150)
-    assert profit(150, 100, "loss") == -100 and profit(-110, 50, "push") == 0
+def test_unit_return():
+    assert unit_return(-110, "win") == pytest.approx(100/110)
+    assert unit_return(150, "win") == pytest.approx(1.5)
+    assert unit_return(150, "loss") == -1 and unit_return(-110, "push") == 0
 
 def test_consensus_and_best():
     assert consensus_novig([(-110,-110), (-120,100)])[0] == pytest.approx(0.5112, abs=1e-3)
@@ -181,7 +188,7 @@ def test_consensus_and_best():
 - [ ] **Step 2: Run** `uv run pytest tests/test_odds_math.py -v` → FAIL.
 - [ ] **Step 3: Implement** the functions above in `odds_math.py`.
 - [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat: odds math (implied prob, devig, kelly, profit)`.
+- [ ] **Step 5: Commit** `feat: odds math (implied prob, devig, unit return)`.
 
 ---
 
@@ -436,7 +443,7 @@ def test_profile_honors_filter(enriched):
 
 ### Task 11: ML model + walk-forward backtest
 
-**Files:** Create `src/nba_predict/models/ml.py`, `src/nba_predict/backtest.py`, `src/nba_predict/picks.py` (market functions only; Task 13 adds the rest); Modify `cli.py`; Test `tests/test_ml.py`, `tests/test_backtest.py`, `tests/test_markets.py`
+**Files:** Create `src/nba_predict/models/ml.py`, `src/nba_predict/backtest.py`, `src/nba_predict/flags.py` (market functions only; Task 13 adds the rest); Modify `cli.py`; Test `tests/test_ml.py`, `tests/test_backtest.py`, `tests/test_markets.py`
 
 **Interfaces:**
 - Consumes: `game_features`, `custom.with_custom`, `run_elo`, `window_rating.fit/predict_rows`, `odds_math`
@@ -445,8 +452,8 @@ def test_profile_honors_filter(enriched):
   - `MLModel(feature_cols, C=1.0, alpha=1.0)`: `.fit(df)` trains three sklearn `Pipeline(SimpleImputer(median) → StandardScaler → est)`: `LogisticRegression(C)` on `home_win`, `Ridge(alpha)` on `margin`, `Ridge` on `total`; `.predict(df) -> DataFrame(game_id, home_win_prob, pred_margin, pred_total)`.
   - Training/scoring rows exclude games where either team has `gp_szn < 3` **and** no prior-season data — prediction still works for them.
   - `backtest.run(conn, test_seasons=("2024-25","2025-26"), refit="monthly") -> pd.DataFrame` (long: `model, season, metric, value`) and writes `backtest_results` with one `run_at`. Walk-forward: for each test month, fit on all games before the month's first day. Models: `home_always` (p = training home win rate, margin = training mean margin), `elo`, `window`, `ml`. Metrics: `n, accuracy, brier, log_loss, margin_mae, total_mae, ece` (10 equal-width bins). For seasons with `m_home_novig`: `market_log_loss`, and for each model, flagged-pick simulation at the spec rule (`evaluate_markets` on `market_view(closing_only=True)`, edge ≥ `edge_threshold`, one side per market, flat 1 unit at the closing price): `bets, hit_rate, roi`.
-  - `picks.market_view(conn, game_id, closing_only=False) -> dict | None` → `{ml_novig: (home, away), ml_price: (home, away), ml_book: (home, away), home_spread, spread_novig: (home, away), spread_price: (home, away), total, total_novig: (over, under), total_price: (over, under)}`; source = latest `oddsapi` pull (closing pull when `closing_only`), else ESPN; consensus no-vig via `odds_math.consensus_novig`, best price via `best_price`, lines = median across books; any market without both prices → its keys `None`; `None` if no snapshot at all.
-  - `picks.evaluate_markets(pred: dict, market: dict, sigma: float, sigma_total: float) -> list[dict]` (each `{market, side, line, price, book, model_prob, market_prob, edge}`): ML `model_prob = home_win_prob` (away = 1 − p); spread `P(home covers) = Φ((pred_margin + home_spread)/sigma)`; total `P(over) = Φ((pred_total − total)/sigma_total)`; `edge = model_prob − market_prob`; markets with `None` line/novig keys are skipped; `*_price`/`*_book` keys are optional (output `price`/`book` = `None`).
+  - `flags.market_view(conn, game_id, closing_only=False) -> dict | None` → `{ml_novig: (home, away), ml_price: (home, away), ml_book: (home, away), home_spread, spread_novig: (home, away), spread_price: (home, away), total, total_novig: (over, under), total_price: (over, under)}`; source = latest `oddsapi` pull (closing pull when `closing_only`), else ESPN; consensus no-vig via `odds_math.consensus_novig`, best price via `best_price`, lines = median across books; any market without both prices → its keys `None`; `None` if no snapshot at all.
+  - `flags.evaluate_markets(pred: dict, market: dict, sigma: float, sigma_total: float) -> list[dict]` (each `{market, side, line, price, book, model_prob, market_prob, edge}`): ML `model_prob = home_win_prob` (away = 1 − p); spread `P(home covers) = Φ((pred_margin + home_spread)/sigma)`; total `P(over) = Φ((pred_total − total)/sigma_total)`; `edge = model_prob − market_prob`; markets with `None` line/novig keys are skipped; `*_price`/`*_book` keys are optional (output `price`/`book` = `None`).
   - When any custom feature has `use_in_model=1`, the backtest also runs `ml_base` (ML without custom features) so the Backtest page shows whether they helped.
   - `backtest.best_model(conn) -> str` = lowest `log_loss` averaged over seasons in the latest run; `"window"` if no run exists.
   - CLI `nba features` (rebuild enriched + features), `nba backtest [--season S ...]` prints a pivot table.
@@ -490,25 +497,25 @@ def test_evaluate_markets_values():
 
 ---
 
-### Task 13: Predict, picks, grading, daily
+### Task 13: Predict, value flags, grading, daily
 
-**Files:** Create `src/nba_predict/predict.py`; Modify `src/nba_predict/picks.py`, `cli.py`; Test `tests/test_picks.py`, `tests/test_daily.py`
+**Files:** Create `src/nba_predict/predict.py`; Modify `src/nba_predict/flags.py`, `cli.py`; Test `tests/test_flags.py`, `tests/test_daily.py`
 
 **Interfaces:**
 - Consumes: everything above
 - Produces:
   - `predict.predict_date(conn, date, models=("elo","window","ml")) -> pd.DataFrame`: fits each model on all final games before `date` (window params via `fit`, ML via `MLModel.fit`), predicts that date's games, upserts `predictions` (`params_json` = fitted params / sigma / feature list).
-  - Uses `picks.market_view` / `picks.evaluate_markets` from Task 11.
-  - `picks.flag_picks(conn, date, model: str | None = None) -> pd.DataFrame`: model defaults to `backtest.best_model`; for each side with `edge >= edge_threshold`, upsert into `picks` with `stake = odds_math.stake(...)` (settings bankroll/fraction/max_pct). At most one side per market per game (higher edge).
-  - `picks.grade(conn, date=None) -> int`: settles picks whose game is `final` (skips others): result from scores (spread: `margin + home_spread` vs 0 from the side; total vs line; push on equality), `profit`, closing from latest `is_closing=1` oddsapi snapshot else ESPN: `clv` = for ML `closing_novig_prob(side) − american_to_prob(price)`; for spread/total, line points in the side's favor (`taken − closing` for home spread, etc.).
-  - CLI: `nba predict [--date]`, `nba picks [--date]`, `nba grade [--date]`, `nba daily` = `ingest current season` → `slate` → `espn` (yesterday) → `odds` (on `OddsApiError`: print message, continue) → `features` → `predict` → `picks` (skipped without odds) → print table: `game, model win% (home), market win%, edge, proj spread vs line, proj total vs line, flags (B2B/rest/low gp)`.
+  - Uses `flags.market_view` / `flags.evaluate_markets` from Task 11.
+  - `flags.flag_values(conn, date, model: str | None = None) -> pd.DataFrame`: model defaults to `backtest.best_model`; for each side with `edge >= edge_threshold`, upsert into `value_flags`. At most one side per market per game (higher edge). No stake is computed or stored.
+  - `flags.grade(conn, date=None) -> int`: settles flags whose game is `final` (skips others): result from scores (spread: `margin + home_spread` vs 0 from the side; total vs line; push on equality), `units = unit_return(price, result)`, closing from latest `is_closing=1` oddsapi snapshot else ESPN: `clv` = for ML `closing_novig_prob(side) − american_to_prob(price)`; for spread/total, line points in the side's favor (`taken − closing` for home spread, etc.).
+  - CLI: `nba predict [--date]`, `nba flags [--date]`, `nba grade [--date]`, `nba daily` = `ingest current season` → `slate` → `espn` (yesterday) → `odds` (on `OddsApiError`: print message, continue) → `features` → `predict` → `flags` (skipped without odds) → print table: `game, model win% (home), market win%, edge, proj spread vs line, proj total vs line, flags (B2B/rest/low gp)`.
 
 - [ ] **Step 1: Tests**
 
 ```python
 def test_flag_threshold_and_one_side(...)  # edge 0.029 not flagged, 0.031 flagged; never both sides
-def test_no_odds_no_pick(...)              # game without snapshots: prediction row exists, no pick
-def test_grade_spread_push_and_profit(...) # home -5 taken at -110, home wins by 5 → push, profit 0
+def test_no_odds_no_flag(...)              # game without snapshots: prediction row exists, no flag
+def test_grade_spread_push_units(...)      # home -5 at -110, home wins by 5 → push, units 0
 def test_grade_skips_unfinished(...)       # scheduled/postponed game → result stays NULL
 def test_clv_ml(...)                       # took +150, closing novig 0.42 → clv == approx(0.02)
 def test_daily_without_odds_key(...)       # no key: exit code 0, output contains "ODDS_API_KEY",
@@ -517,29 +524,29 @@ def test_daily_without_odds_key(...)       # no key: exit code 0, output contain
 
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Live check** `uv run nba daily` prints today's slate with edges; next day `uv run nba grade` settles them.
-- [ ] **Step 6: Commit** `feat: predictions, value picks, grading and daily command`.
+- [ ] **Step 6: Commit** `feat: predictions, value flags, grading and daily command`.
 
 ---
 
-### Task 14: Dashboard — Today (+ playground), Team trends, Pick log, Backtest
+### Task 14: Dashboard — Today (+ playground), Team trends, Flag log, Backtest
 
-**Files:** Create `app/dashboard.py`, `app/components/data.py`, `app/components/sidebar.py`, `app/pages/1_Today.py`, `app/pages/2_Team_Trends.py`, `app/pages/6_Pick_Log.py`, `app/pages/7_Backtest.py`; Test `tests/test_app.py`
+**Files:** Create `app/dashboard.py`, `app/components/data.py`, `app/components/sidebar.py`, `app/pages/1_Today.py`, `app/pages/2_Team_Trends.py`, `app/pages/6_Flag_Log.py`, `app/pages/7_Backtest.py`; Test `tests/test_app.py`
 
 **Interfaces:**
-- Consumes: DB tables, `FilterSpec`, presets, `apply_filter`, `aggregate`, `team_profile`, `predict_profiles`, `picks.market_view`, `evaluate_markets`
+- Consumes: DB tables, `FilterSpec`, presets, `apply_filter`, `aggregate`, `team_profile`, `predict_profiles`, `flags.market_view`, `flags.evaluate_markets`
 - Produces:
   - `components.data.load_table(name: str) -> pd.DataFrame` (`st.cache_data`, cache key includes DB file mtime) and `db_path() -> str` (env `NBA_DB_PATH` override — tests point it at the fixture DB).
   - `components.sidebar.filter_sidebar(df, key: str) -> FilterSpec`: one widget per `FilterSpec` field (last-N as a free number input, not a fixed list), preset load/save/delete; shows `spec.describe()`.
   - **Today:** date picker (default today ET); per game card: teams, model win% per model, market no-vig %, edge, best price/book, proj spread vs line, proj total vs line, flags (B2B, rest diff, low gp, "no odds"), and "injuries not included" note. **Playground** expander per game: window multiselect + free "add N" input, weight sliders, split weight, HCA, B2B/rest points, toggle SOS, and a `filter_sidebar` for each team's input games → recomputes with `team_profile` + `predict_profiles` + `evaluate_markets` live; shows the inputs table it used.
   - **Team trends:** team select; line chart of rolling net for each chosen N over the season; table of metrics for L5/8/10/15/szn × all/home/away; ATS and O/U records per window.
-  - **Pick log:** filters (date range, market, model); record, units, ROI, average CLV; cumulative profit chart; calibration chart (model prob deciles vs hit rate); table.
+  - **Flag log:** filters (date range, market, model); record, hit rate, 1-unit ROI (labelled "model evaluation, not betting"), average CLV; cumulative units chart; calibration chart (model prob deciles vs hit rate); table.
   - **Backtest:** run selector (`run_at`), pivot `model × season × metric`, "Run backtest" button calling `backtest.run`.
   - Charts via plotly; follow the `dataviz` skill when building them.
 
 - [ ] **Step 1: Tests** — `streamlit.testing.v1.AppTest.from_file(page).run()` for each page against `fixture_db` (env `NBA_DB_PATH`): `not at.exception`; Today page shows 2 game cards for the fixture's scheduled date; changing playground HCA slider changes the displayed margin.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Manual check** `uv run streamlit run app/dashboard.py` on the real DB; click through the four pages.
-- [ ] **Step 6: Commit** `feat: dashboard today/playground, trends, pick log, backtest`.
+- [ ] **Step 6: Commit** `feat: dashboard today/playground, trends, flag log, backtest`.
 
 ---
 
@@ -551,7 +558,7 @@ def test_daily_without_odds_key(...)       # no key: exit code 0, output contain
 - Consumes: `filter_sidebar`, `apply_filter`, `METRICS`, `aggregate`, `readonly_query`, `custom.*`
 - Produces:
   - **Explorer:** `filter_sidebar` over `team_games_enriched` (+ custom feature columns joined by `game_id`); metric multiselect (registry keys + any numeric column with mean/median/sum); group-by multiselect (`team_abbr, opp_abbr, is_home, rest_days, month, weekday, is_favorite, season`); outputs aggregate table, chart (bar for groups, line over `game_date` when grouped by date), matching game rows, CSV download for both. Empty result → `st.info("No games match these filters")`.
-  - **Data:** table picker over every table (`games, team_games, team_games_enriched, game_features, odds_snapshots, predictions, picks, api_usage, backtest_results, custom_features`), column chooser, row count, the shared filters where the table has the needed columns, CSV download.
+  - **Data:** table picker over every table (`games, team_games, team_games_enriched, game_features, odds_snapshots, predictions, value_flags, api_usage, backtest_results, custom_features`), column chooser, row count, the shared filters where the table has the needed columns, CSV download.
   - **SQL:** text area, Run → `readonly_query`; table + optional chart (x/y column pickers) + CSV; `QueryError` shown with `st.error`; sidebar lists tables and their columns (`PRAGMA table_info` via the read-only path).
   - **Custom features:** list with toggle `use_in_model` and delete; form (name, expression) with "Preview" (first 20 values + distribution) and "Save"; note that ML uses enabled features after the next backtest/predict.
 
@@ -565,6 +572,6 @@ def test_daily_without_odds_key(...)       # no key: exit code 0, output contain
 
 **Files:** Create/Modify `README.md`
 
-- [ ] **Step 1: Write README:** setup (`uv sync`, copy `.env.example`, get a free key at the-odds-api.com), first-time backfill (`nba init-db`, `nba ingest` ×4 seasons, `nba espn` ranges for 2025-26 and 2026-27 with time estimates), daily routine (`nba daily` morning, `nba odds --closing` ~30 min before first tip, `nba grade` next morning), dashboard (`uv run streamlit run app/dashboard.py`), optional launchd plist / cron line for `nba daily`, data-source caveats (nba_api unofficial, ESPN unofficial and 2023-25 gap, free quota math, no injuries).
+- [ ] **Step 1: Write README:** setup (`uv sync`, copy `.env.example`, get a free key at the-odds-api.com), first-time backfill (`nba init-db`, `nba ingest` ×4 seasons, `nba espn` ranges for 2025-26 and 2026-27 with time estimates), daily routine (`nba daily` morning, `nba odds --closing` ~30 min before first tip, `nba grade` next morning; no bankroll/betting features by design), dashboard (`uv run streamlit run app/dashboard.py`), optional launchd plist / cron line for `nba daily`, data-source caveats (nba_api unofficial, ESPN unofficial and 2023-25 gap, free quota math, no injuries).
 - [ ] **Step 2: Full verification** — `uv run pytest -q` all green; run the spec's Verification list on the real DB and record outputs (row counts, backtest table, today's `nba daily` output, credits used = 3).
 - [ ] **Step 3: Commit** `docs: README with setup and daily routine`.

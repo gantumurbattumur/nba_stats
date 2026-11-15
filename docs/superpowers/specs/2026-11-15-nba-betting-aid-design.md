@@ -1,17 +1,19 @@
-# NBA Betting Aid — Design & Implementation Plan
+# NBA Stats & Odds Analysis — Design
 
 ## Context
-The repo (`/Users/ganabattumur/GANA/projects/nba_stats`) is empty, with no commits. The user wants a **personal betting aid** that runs locally. Each day it pulls recent NBA stats and today's sportsbook odds, predicts every game on today's slate, and shows where the model disagrees with the market. The predictions draw on recent form (last 5/8/10/15 games), home/away splits and other standard methods. The chosen approach is **Python + a local SQLite database + a Streamlit dashboard**.
+The repo (`/Users/ganabattumur/GANA/projects/nba_stats`) is empty, with no commits. The user wants a **personal, local NBA stats & odds analysis tool whose purpose is showing the data engineering**. **Scope update 2026-11-15:** no bankroll, no stake sizing, no Kelly, no connection to any bank/wallet/sportsbook account, and nothing ever places a bet. "Value flags" are model-vs-market disagreements shown for analysis.
+
+It Each day it pulls recent NBA stats and today's sportsbook odds, predicts every game on today's slate, and shows where the model disagrees with the market. The predictions draw on recent form (last 5/8/10/15 games), home/away splits and other standard methods. The chosen approach is **Python + a local SQLite database + a Streamlit dashboard**.
 
 Success means:
-1. Each morning, one command gives a ranked list of value picks.
-2. The dashboard lets the user check why a pick looks good (trends, splits, rest).
-3. A pick log shows whether the model is actually any better than the lines (hit rate, ROI, closing-line value).
+1. Each morning, one command gives a ranked list of value flags (model vs market disagreements).
+2. The dashboard lets the user check why a flag appears (trends, splits, rest).
+3. A flag log shows whether the model is actually any better than the lines (hit rate, hypothetical 1-unit ROI as an evaluation metric, closing-line value).
 
 ## Goals / Non-goals / Anti-goals
-- **Goals:** daily predictions for moneyline, spread and total; model win chance vs no-vig market chance; trend views by window and by home/away; a pick log with grading and CLV; a backtest that compares model variants.
+- **Goals:** daily predictions for moneyline, spread and total; model win chance vs no-vig market chance; trend views by window and by home/away; a flag log with grading and CLV; a backtest that compares model variants.
 - **Non-goals (v1):** player-level props, injury feeds (no free reliable source; the dashboard notes this), hosting, multiple users, live in-game odds.
-- **Anti-goals:** data leakage (features must use only games *before* the game being predicted); unearned confidence (always show calibration and backtest numbers next to picks); burning the free odds quota.
+- **Anti-goals:** data leakage (features must use only games *before* the game being predicted); unearned confidence (always show calibration and backtest numbers next to flags); burning the free odds quota; **any bankroll, staking, bank/sportsbook connection or bet placement**.
 
 ## Constraints and data sources
 - **Stats: `nba_api`** (free, unofficial wrapper of stats.nba.com). It works locally but blocks cloud IPs, and that doesn't matter here.
@@ -56,7 +58,7 @@ Success means:
 4. **Market comparison:**
    - Convert American odds to implied chance, then strip the bookmaker's margin by scaling both sides to sum to 1. Use the consensus across books, plus the best available price.
    - Edge = model chance − market chance. For spreads and totals, edge = model margin or total − the line.
-   - Flag a pick when edge ≥ 3% (configurable). Suggest a stake at ¼ Kelly of a configurable bankroll.
+   - Flag a side when edge ≥ 3% (configurable). No stake sizing or bankroll.
 
 ## Filters and custom analysis (user request: "any sort of filters", "see any custom data engineering results")
 Every table the pipeline produces stays queryable. Nothing is hidden behind fixed charts.
@@ -76,7 +78,7 @@ Every table the pipeline produces stays queryable. Nothing is hidden behind fixe
   - filters + a picker for any metric (raw box score or derived: offensive/defensive/net rating, pace, effective FG%, turnover rate, offensive rebound rate, free-throw rate, record vs the spread, over/under record, margin vs the spread)
   - an aggregation (mean/median/sum/record) and a group-by (team, opponent, home/away, rest bucket, month, favorite/underdog)
   - shown as a table and a chart, with a CSV download
-- **Data page:** browse every stage of the pipeline: raw game logs, odds snapshots (ESPN past + Odds API live), the per-game feature table, predictions, picks. Each view shows the same filters and row counts.
+- **Data page:** browse every stage of the pipeline: raw game logs, odds snapshots (ESPN past + Odds API live), the per-game feature table, predictions, value flags. Each view shows the same filters and row counts.
 - **SQL console:** run any SELECT against the database through a **read-only** connection (`file:…?mode=ro`), with results shown as a table, a chart and a CSV.
 - **Custom features:**
   - The user defines a named column with a SQL expression over the feature table, e.g. `l5_net_home - l10_net_away`.
@@ -93,7 +95,7 @@ nba_stats/
   README.md
   docs/superpowers/specs/2026-11-15-nba-betting-aid-design.md   # this design, committed
   src/nba_predict/
-    config.py               # settings (env + defaults: windows, edge threshold, kelly frac, bankroll)
+    config.py               # settings (env + defaults: windows, edge threshold)
     db.py                   # SQLite schema + helpers
     data/nba_client.py      # nba_api wrapper: rate limit, retries, season game logs, today's slate
     data/odds_client.py     # Odds API client, credit-usage logging
@@ -109,21 +111,21 @@ nba_stats/
     models/elo.py
     models/window_rating.py
     models/ml.py
-    odds_math.py            # american↔prob, devig, edge, kelly
+    odds_math.py            # american↔prob, devig, edge, 1-unit return
     predict.py              # today's pipeline → predictions table
-    picks.py                # flag value picks, log them, grade results, CLV vs closing snapshot
+    flags.py                # value flags, log them, grade results, CLV vs closing snapshot
     backtest.py             # walk-forward evaluation of all models
     cli.py                  # typer: ingest | odds | predict | grade | backtest | daily
   app/dashboard.py          # Streamlit multipage entry
-  app/pages/                # Today(+playground) · Team trends · Explorer · Data · SQL · Pick log · Backtest
+  app/pages/                # Today(+playground) · Team trends · Explorer · Data · SQL · Flag log · Backtest
   tests/                    # pytest with small fixture game logs
   data/                     # nba.db (gitignored)
 ```
-**SQLite tables:** `team_games` (one row per team per game, with the box score), `games`, `odds_snapshots` (source espn|oddsapi, book, market, price/line, pulled_at, is_closing), `filter_presets`, `custom_features`, `predictions` (model, game, prob/margin/total, created_at), `picks` (market, side, line, price, edge, stake, result, clv).
+**SQLite tables:** `team_games` (one row per team per game, with the box score), `games`, `odds_snapshots` (source espn|oddsapi, book, market, price/line, pulled_at, is_closing), `filter_presets`, `custom_features`, `predictions` (model, game, prob/margin/total, created_at), `value_flags` (market, side, line, price, edge, result, units, clv).
 
 ## Implementation order (test-first for logic pieces)
 1. **Scaffold.** Set up uv, `pyproject`, config and `.gitignore`. Save this design to `docs/superpowers/specs/…` and make the first commit.
-2. **Odds math** (`odds_math.py`) with unit tests: odds conversion, devig, edge, Kelly.
+2. **Odds math** (`odds_math.py`) with unit tests: odds conversion, devig, edge, 1-unit return.
 3. **Ingest.**
    - `nba_client` + `db`. `nba ingest --seasons 2023-24..2026-27` backfills; running it again pulls only new games.
    - Today's slate from the live scoreboard.
@@ -134,12 +136,12 @@ nba_stats/
 5. **Models + backtest.**
    - Build Elo, the window rating model and the ML model.
    - `nba backtest` runs walk-forward over 2024-25 and 2025-26 and reports accuracy, Brier score, log loss, margin MAE and total MAE per model, against an "always pick home" baseline.
-  - On 2025-26 it also scores against the market using ESPN lines: hit rate and ROI on flagged picks, and model log loss vs the market's no-vig log loss.
+  - On 2025-26 it also scores against the market using ESPN lines: hit rate and 1-unit ROI on flagged sides, and model log loss vs the market's no-vig log loss.
    - Fit the window weights, home-court advantage and σ here.
 6. **Odds ingest + team-name mapping.** `nba odds` stores a snapshot and logs credits remaining. A `--closing` flag marks the near-tip pull.
-7. **Predict + picks.**
+7. **Predict + value flags.**
    - `nba predict` writes predictions for today's games with the best model or blend.
-   - `picks.py` flags edges and suggests stakes.
+   - `flags.py` flags edges (no stakes).
    - `nba grade` settles finished games and computes CLV.
    - `nba daily` = ingest → odds → predict → flag.
 8. **Dashboard.** All pages use the shared filter sidebar. Pages:
@@ -147,7 +149,7 @@ nba_stats/
    - **Model playground** on the Today page.
    - **Today:** game cards with model vs market chance, edge, projected spread and total vs line, and rest/b2b flags.
    - **Team trends:** a team picker, net rating by window, home vs away.
-   - **Pick log:** record, ROI, CLV, a calibration chart.
+   - **Flag log:** record, hit rate, 1-unit ROI (evaluation only), CLV, a calibration chart.
    - **Backtest:** the metrics table.
 9. **README.** Setup, getting the API key, daily routine, and how to schedule `nba daily` with launchd/cron (scheduling is optional).
 
@@ -164,4 +166,4 @@ Exact Elo parameters, window-blend weights (fit in the backtest), ridge/logistic
   - The SQL console rejects writes (e.g. `DELETE`).
   - A custom feature shows up in the Explorer and in the backtest.
 - `uv run pytest` also covers: FilterSpec → SQL for each filter type, and the ESPN parser on a saved summary JSON with and without `pickcenter`.
-- Next day: `uv run nba grade` settles yesterday's picks, and the pick log updates.
+- Next day: `uv run nba grade` settles yesterday's flags, and the flag log updates.
