@@ -124,3 +124,17 @@ def test_features_command_always_rebuilds(cli_db, monkeypatch):
         assert "game_features: 50 rows" in r.output
     assert calls == ["e", ("f", (5, 10)), "e", ("f", (5, 10))]
     assert "h_all_l10_net" in {r[1] for r in sq.connect(cli_db).execute("pragma table_info(game_features)")}
+
+
+def test_backtest_command(cli_db):
+    import conftest
+    from nba_predict.db import connect, init_schema
+
+    c = connect(cli_db)
+    init_schema(c)
+    conftest.build_league(c)
+    c.close()
+    r = CliRunner().invoke(cli.app, ["backtest", "--season", "2025-26", "--n-boot", "20"])
+    assert r.exit_code == 0, r.output
+    assert "== 2025-26 (test) ==" in r.output and "log_loss" in r.output and "best model" in r.output
+    assert "by segment" in r.output

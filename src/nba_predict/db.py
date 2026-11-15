@@ -128,7 +128,9 @@ CREATE TABLE IF NOT EXISTS backtest_results (
     model TEXT,
     season TEXT,
     metric TEXT,
-    value REAL
+    value REAL,
+    segment TEXT NOT NULL DEFAULT 'all',   -- all | early (either team < 15 season games) | rest
+    role TEXT NOT NULL DEFAULT 'test'      -- test (walk-forward) | holdout (reported only)
 );
 """
 
@@ -155,6 +157,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if "season_type" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN season_type TEXT NOT NULL DEFAULT 'regular'")
             conn.execute(f"UPDATE {table} SET season_type = {SEASON_TYPE_SQL}")
+    bt = {r[1] for r in conn.execute("PRAGMA table_info(backtest_results)")}
+    if "segment" not in bt:
+        conn.execute("ALTER TABLE backtest_results ADD COLUMN segment TEXT NOT NULL DEFAULT 'all'")
+    if "role" not in bt:
+        conn.execute("ALTER TABLE backtest_results ADD COLUMN role TEXT NOT NULL DEFAULT 'test'")
 
 
 def init_schema(conn: sqlite3.Connection) -> None:

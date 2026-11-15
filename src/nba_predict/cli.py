@@ -175,3 +175,36 @@ def features(
     f = build_feature_table(conn, wins)
     typer.echo(f"team_games_enriched: {len(e)} rows; game_features: {len(f)} rows x {f.shape[1]} cols "
                f"(windows {','.join(map(str, wins))}) in {time.monotonic() - t:.1f}s")
+
+
+@app.command("backtest")
+def backtest_cmd(
+    season: Annotated[list[str] | None, typer.Option("--season", help="test season; repeatable")] = None,
+    holdout: Annotated[list[str] | None, typer.Option("--holdout", help="reported-only season; repeatable")] = None,
+    n_boot: Annotated[int, typer.Option("--n-boot", help="bootstrap resamples for CIs")] = 1000,
+) -> None:
+    """Walk-forward backtest of all models; prints metric × model per season (evaluation only)."""
+    import pandas as pd
+
+    from nba_predict import backtest
+
+    conn = _conn()
+    res = backtest.run(conn, test_seasons=tuple(season or ("2024-25", "2025-26")),
+                       holdout=tuple(holdout or ()), n_boot=n_boot)
+    if res.empty:
+        typer.echo("no results (no final games in the requested seasons?)")
+        raise typer.Exit(1)
+    pd.set_option("display.width", 250)
+    order = list(dict.fromkeys(res.metric))
+    for (role, sz), g in res[res.segment == "all"].groupby(["role", "season"], sort=False):
+        typer.echo(f"\n== {sz} ({role}) ==")
+        t = g.pivot_table(index="metric", columns="model", values="value", aggfunc="first")
+        t = t.reindex([m for m in order if m in t.index])
+        typer.echo(t.to_string(float_format=lambda v: f"{v:.4f}"))
+    seg = res[(res.segment != "all") & res.metric.isin(["n", "log_loss", "margin_mae", "mae_gap"])]
+    if not seg.empty:
+        typer.echo("\n== by segment (early = either team < 15 season games) ==")
+        t = seg.pivot_table(index=["role", "season", "segment", "metric"], columns="model", values="value",
+                            aggfunc="first")
+        typer.echo(t.to_string(float_format=lambda v: f"{v:.4f}"))
+    typer.echo(f"\nbest model (lowest mean test log_loss): {backtest.best_model(conn)}")
