@@ -67,3 +67,9 @@ def test_invalid_american_odds_rejected(bad):
 
 def test_best_price_mixed_signs():
     assert best_price([-105, 100, -110]) == 100
+
+
+def test_decimal_to_american_roundtrip():
+    from nba_predict.odds_math import decimal_to_american
+    for o in (-1040, -200, -110, 100, 105, 150, 670):
+        assert decimal_to_american(american_to_decimal(o)) == o

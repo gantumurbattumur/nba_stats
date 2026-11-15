@@ -57,3 +57,10 @@ def consensus_novig(pairs: list[tuple[int, int]]) -> tuple[float, float] | None:
 def best_price(prices: list[int]) -> int:
     """Price with the highest decimal payout."""
     return max(prices, key=american_to_decimal)
+
+
+def decimal_to_american(dec: float) -> int:
+    """Inverse of ``american_to_decimal`` (rounded); decimal 2.0 → +100."""
+    if dec <= 1.0:
+        raise ValueError(f"invalid decimal odds {dec!r}")
+    return int(round((dec - 1.0) * 100)) if dec >= 2.0 else int(round(-100 / (dec - 1.0)))
