@@ -32,6 +32,7 @@ from nba_predict.odds_math import unit_return
 
 log = logging.getLogger(__name__)
 CORE_MODELS = ("home_always", "elo", "window", "ml")
+PREDICTABLE = ("elo", "window", "ml")  # what predict_date produces; best_model picks among these
 EARLY_GAMES = 15  # segment 'early' = either team has fewer season games than this
 
 
@@ -68,11 +69,17 @@ def _custom_model_cols(conn: sqlite3.Connection) -> list[str]:
 
 
 def effective_hca(train: pd.DataFrame, params: wr.WindowParams) -> float:
-    """Raw hca plus the home edge the split (home/road) blend carries: mean of
-    pred_margin(params) − pred_margin(params with split_weight = 0) over ``train``."""
-    a = wr.predict_rows(train, params).pred_margin
-    b = wr.predict_rows(train, params.model_copy(update={"split_weight": 0.0})).pred_margin
-    return float(params.hca + np.nanmean(a.to_numpy() - b.to_numpy()))
+    """Points of home edge the fitted model adds on average over ``train``: mean of
+    pred_margin(params) − pred_margin(neutral), where *neutral* removes every home-edge source:
+    ``hca = 0``, ``split_weight = 0`` (home/road split ratings carry home court) and the Elo
+    prior's built-in home advantage (``elo_margin − home_adv/28``). Without the Elo prior this
+    is ``hca`` + the split blend's edge; with it, the prior's share is counted too."""
+    a = wr.predict_rows(train, params).pred_margin.to_numpy()
+    neutral = train
+    if "elo_margin" in train:
+        neutral = train.assign(elo_margin=train["elo_margin"] - EloParams().home_adv / 28.0)
+    b = wr.predict_rows(neutral, params.model_copy(update={"hca": 0.0, "split_weight": 0.0})).pred_margin.to_numpy()
+    return float(np.nanmean(a - b))
 
 
 def _elo_margin(df: pd.DataFrame) -> np.ndarray:
@@ -259,10 +266,14 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
 
 def best_model(conn: sqlite3.Connection) -> str:
     """Model with the lowest log_loss averaged over test seasons (segment 'all') in the latest
-    run that has test rows; holdout rows never count. 'window' if none."""
+    run that has test rows; holdout rows never count. Only models ``predict_date`` produces
+    (``PREDICTABLE``) are eligible — baselines and ablations (home_always, window_noprior,
+    ml_base) are reported but never chosen, else ``flag_values`` would find no predictions.
+    'window' if none."""
+    ph = ", ".join("?" for _ in PREDICTABLE)
     row = conn.execute(
         "select model from backtest_results where run_at = (select max(run_at) from backtest_results "
         "where role = 'test') and role = 'test' and segment = 'all' and metric = 'log_loss' "
-        "and model != 'market' group by model order by avg(value) limit 1"
+        f"and model in ({ph}) group by model order by avg(value) limit 1", PREDICTABLE
     ).fetchone()
     return row[0] if row else "window"

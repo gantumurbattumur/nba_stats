@@ -65,7 +65,7 @@ def test_best_model_default(conn, fixture_db, feats):
     backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=50)
     out = fixture_db.execute(
         "select model, avg(value) v from backtest_results where metric='log_loss' and segment='all' "
-        "and role='test' and model != 'market' group by model order by v limit 1").fetchone()
+        "and role='test' and model in ('elo', 'window', 'ml') group by model order by v limit 1").fetchone()
     assert backtest.best_model(fixture_db) == out[0]
 
 

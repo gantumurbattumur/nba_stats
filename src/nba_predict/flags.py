@@ -157,7 +157,10 @@ def flag_values(conn: sqlite3.Connection, date, model: str | None = None):
         sigma = pj.get("sigma") or 12.5
         sigma_t = pj.get("sigma_total") or 18.0
         pred = dict(home_win_prob=r["home_win_prob"], pred_margin=r["pred_margin"], pred_total=r["pred_total"])
-        flags = pick_flags(evaluate_markets(pred, mv, sigma, sigma_t), thr)
+        settled = {x[0] for x in conn.execute(
+            "select market from value_flags where game_id = ? and result is not null", (r["game_id"],))}
+        flags = [fl for fl in pick_flags(evaluate_markets(pred, mv, sigma, sigma_t), thr)
+                 if fl["market"] not in settled]  # never a second side next to a settled flag
         conn.execute("delete from value_flags where game_id = ? and result is null", (r["game_id"],))
         recs = [dict(game_id=r["game_id"], created_at=now, model=model, **fl) for fl in flags]
         if recs:
