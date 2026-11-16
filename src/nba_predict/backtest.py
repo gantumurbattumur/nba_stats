@@ -7,7 +7,7 @@ Metrics per (model, season, segment): n, accuracy, brier, log_loss (+ ``_ci_lo``
 95% game bootstrap), margin_mae (+ CI), total_mae, ece; on games with a closing line also
 log_loss_market_games, mae_gap (model − market margin MAE, + CI), n_spread_games and a flagged
 side evaluation at the spec rule (edge >= edge_threshold, one side per market, a hypothetical
-1 unit at the closing price): bets, hit_rate, roi. Model ``market``: n, market_log_loss,
+1 unit at the closing price): n_flags, hit_rate, roi. Model ``market``: n, market_log_loss,
 market_margin_mae. Window models (segment all) add hca, effective_hca, split_weight,
 elo_prior_games. These are model-evaluation metrics only — nothing is staked.
 """
@@ -132,7 +132,7 @@ def _flag_eval(conn, rows: pd.DataFrame, threshold: float, mv_cache: dict) -> di
             wins += res == "win"
             losses += res == "loss"
     n = len(units)
-    return dict(bets=n, hit_rate=wins / (wins + losses) if wins + losses else float("nan"),
+    return dict(n_flags=n, hit_rate=wins / (wins + losses) if wins + losses else float("nan"),
                 roi=float(np.sum(units) / n) if n else float("nan"))
 
 

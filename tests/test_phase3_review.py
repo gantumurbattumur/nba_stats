@@ -238,3 +238,13 @@ def test_never_flag_a_prediction_made_after_tip(fixture_db):
     fixture_db.execute("update predictions set made_after_tip = 1 where game_id = ?", (G,))
     fixture_db.commit()
     assert flag_values(fixture_db, D, model="window").empty
+
+
+def test_no_betting_vocabulary_in_metrics_or_columns(fixture_db):
+    # hard rule: analysis only. Metric/column names describe flags, never bets/stakes.
+    import re
+    from nba_predict.db import SCHEMA
+    banned = re.compile(r"\b(bets?|stakes?|wagers?|bankroll|kelly|deposit|account)\b", re.I)
+    assert not banned.findall(SCHEMA)
+    out = backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=10)
+    assert not [m for m in set(out.metric) if banned.search(m.replace("_", " "))]

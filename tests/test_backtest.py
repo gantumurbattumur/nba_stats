@@ -46,7 +46,7 @@ def test_backtest_metrics_shape(fixture_db, feats):
     for m in ("home_always", "elo", "window", "ml"):
         got = set(out[out.model == m].metric)
         assert METRICS <= got, (m, METRICS - got)
-        assert {"bets", "hit_rate", "roi", "log_loss_market_games"} <= got
+        assert {"n_flags", "hit_rate", "roi", "log_loss_market_games"} <= got
     assert "market_log_loss" in set(out[out.model == "market"].metric)
     s2 = feats[(feats.season == "2025-26") & feats.home_win.notna()]
     ha = out[(out.model == "home_always") & (out.metric == "accuracy")].value.iloc[0]
