@@ -10,8 +10,10 @@ from pydantic import BaseModel
 
 
 class EloParams(BaseModel):
-    k: float = 20.0
-    home_adv: float = 100.0
+    # tuned on 2023-24 final games only (log loss; grid k 20..40, home_adv 20..100). The plan's
+    # k=20 / home_adv=100 over-predicted the home side: +3.6 pts vs ~+1.8 actual.
+    k: float = 25.0
+    home_adv: float = 40.0
     revert: float = 0.25
     mean: float = 1505.0
 

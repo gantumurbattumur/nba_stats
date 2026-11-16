@@ -36,7 +36,12 @@ def test_best_model_only_returns_predictable_models(conn, winner):
 
 # --- effective HCA counts every home-edge source ---------------------------------------------
 
-def _even_rows(n=40, gp=2.0, elo_margin=100 / 28):
+from nba_predict.models.elo import EloParams
+
+HOME_ELO_PTS = EloParams().home_adv / 28  # even teams' elo_margin
+
+
+def _even_rows(n=40, gp=2.0, elo_margin=HOME_ELO_PTS):
     """Identical teams: every window equal for both sides; only home sources differ."""
     row = {"margin": 2.0, "total": 220.0, "h_gp_szn": gp, "a_gp_szn": gp, "elo_margin": elo_margin,
            "h_b2b": 0, "a_b2b": 0, "h_rest": 1, "a_rest": 1}
@@ -57,12 +62,12 @@ def test_effective_hca_without_prior_is_hca_plus_split_edge():
 
 
 def test_effective_hca_counts_the_elo_prior_home_edge():
-    # with a heavy prior (k >> gp) the prediction is ~ elo_margin = 100/28 = 3.57 for even teams,
-    # so the model's home edge is ~3.57, not ~hca + split * (1 - w)
+    # with a heavy prior (k >> gp) the prediction is ~ elo_margin = home_adv/28 for even teams,
+    # so the model's home edge is that, not ~hca + split * (1 - w)
     df = _even_rows(gp=1.0)
     p = wr.WindowParams(hca=1.0, split_weight=0.25, elo_prior_games=1000.0)
     eff = backtest.effective_hca(df, p)
-    assert eff == pytest.approx(100 / 28, abs=0.05)
+    assert eff == pytest.approx(HOME_ELO_PTS, abs=0.05)
     pred = wr.predict_rows(df, p).pred_margin.mean()
     assert eff == pytest.approx(pred, abs=1e-6)  # even teams: whole predicted margin is home edge
 

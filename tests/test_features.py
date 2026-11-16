@@ -223,4 +223,5 @@ def test_opener_and_elo_margin_columns(feats):
     s2_open = feats[(feats.season == "2025-26")].sort_values("game_date").iloc[0]
     assert s2_open.h_opener == 1 and feats.sort_values("game_date").iloc[5].h_opener == 0
     assert "elo_margin" in feats.columns and feats.elo_margin.notna().all()
-    assert first.elo_margin == pytest.approx(100 / 28)
+    from nba_predict.models.elo import EloParams
+    assert first.elo_margin == pytest.approx(EloParams().home_adv / 28)

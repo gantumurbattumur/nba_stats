@@ -27,7 +27,7 @@ from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
 from nba_predict.config import DEFAULT_WINDOWS
 from nba_predict.ingest import season_for_date
-from nba_predict.models.elo import run_elo
+from nba_predict.models.elo import EloParams, run_elo
 from nba_predict.odds_math import american_to_prob, devig_two_way
 from nba_predict.teams import by_abbr
 
@@ -188,7 +188,7 @@ def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd
         for w in [f"l{n}" for n in windows] + ["szn"]:
             for mkey in METRICS + ["adjnet"]:
                 diffs[f"d_{scope}_{w}_{mkey}"] = out[f"h_{scope}_{w}_{mkey}"] - out[f"a_{scope}_{w}_{mkey}"]
-    elo = run_elo(games)[["game_id", "h_elo", "a_elo", "elo_prob", "elo_margin"]].set_index("game_id")
+    elo = run_elo(games, EloParams())[["game_id", "h_elo", "a_elo", "elo_prob", "elo_margin"]].set_index("game_id")
     out = pd.concat([out, pd.DataFrame(diffs, index=out.index)], axis=1).join(_market(conn)).join(elo).copy()
 
     final = out.status == "final"
@@ -215,7 +215,8 @@ def features_fingerprint(conn: sqlite3.Connection, windows) -> str:
             "select game_id, game_date, status, home_team_id, away_team_id, home_pts, away_pts, "
             "season, season_type from games order by game_id"):
         h.update(repr(tuple(r)).encode())
-    return json.dumps([source_fingerprint(conn), h.hexdigest(), [int(w) for w in windows]])
+    return json.dumps([source_fingerprint(conn), h.hexdigest(), [int(w) for w in windows],
+                       EloParams().model_dump()])  # Elo columns change with the Elo params
 
 
 def load_features(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataFrame:
