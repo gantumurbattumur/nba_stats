@@ -60,9 +60,13 @@ def workflow_predictions(conn, games: pd.DataFrame, *, features=None, prediction
                          and info.get("model_seasons") == list(get_settings().model_seasons)
                          and bool(info.get("train_seasons"))
                          and set(info["train_seasons"]) <= set(get_settings().model_seasons)
+                         and isinstance(info.get("train_games"), int)
+                         and info["train_games"] >= 10
                          and bool(info.get("train_max_date"))
                          and info["train_max_date"] < game["game_date"]
                          and p.get("made_after_tip") == 0
+                         and all(np.isfinite(p.get(k)) for k in ("home_win_prob", "pred_margin", "pred_total"))
+                         and 0 <= p["home_win_prob"] <= 1
                          and _timestamp(p.get("created_at")) < _timestamp(game.get("start_time_utc")))
             except (ValueError, TypeError, AttributeError):
                 valid = False

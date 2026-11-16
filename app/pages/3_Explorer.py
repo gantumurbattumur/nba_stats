@@ -15,8 +15,8 @@ from components.sidebar import filter_sidebar  # noqa: E402
 from nba_predict.analysis.filters import apply_filter  # noqa: E402
 from nba_predict.analysis.metrics import METRICS, aggregate  # noqa: E402
 
-st.set_page_config(page_title="Explorer", layout="wide")
-header("Explorer", "Filters in the sidebar → aggregate table, chart and matching games. Ratings are sum-based.")
+st.set_page_config(page_title="Explore", layout="wide")
+header("Explore", "Filters in the sidebar → aggregate table, chart and matching games. Ratings are sum-based.")
 
 df = enriched()
 if df.empty:
@@ -34,12 +34,19 @@ except Exception as e:  # noqa: BLE001 - no game_features yet / broken feature: 
 spec = filter_sidebar(df, "ex")
 out = apply_filter(df, spec)
 
+if st.button("ATS & O/U by team", help="Show cover and over/under records and rates, grouped by team. Keeps your filters."):
+    st.session_state["ex_metrics"] = ["ats_record", "ats_pct", "ou_record", "over_pct"]
+    st.session_state["ex_group"] = ["team_abbr"]
+    st.session_state["ex_raw"] = []
+
 GROUPS = ["team_abbr", "opp_abbr", "is_home", "rest_days", "month", "weekday", "is_favorite", "season",
           "season_type", "b2b", "game_date"]
+st.session_state.setdefault("ex_metrics", ["record", "net", "ortg", "drtg", "pace"])
+st.session_state.setdefault("ex_group", ["team_abbr"])
 c1, c2, c3 = st.columns([3, 2, 2])
-metric_keys = c1.multiselect("Metrics", list(METRICS), default=["record", "net", "ortg", "drtg", "pace"],
+metric_keys = c1.multiselect("Metrics", list(METRICS),
                              format_func=lambda k: f"{METRICS[k].label} ({k})", key="ex_metrics")
-group_by = c2.multiselect("Group by", GROUPS, default=["team_abbr"], key="ex_group")
+group_by = c2.multiselect("Group by", GROUPS, key="ex_group")
 numeric = sorted(c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and c not in METRICS)
 raw_cols = c3.multiselect("Raw columns", numeric, key="ex_raw")
 raw_how = c3.selectbox("Raw aggregation", ["mean", "median", "sum"], key="ex_raw_how")

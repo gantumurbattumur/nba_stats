@@ -35,6 +35,10 @@ def closing_lines(conn: sqlite3.Connection) -> pd.DataFrame:
     cols = ["game_id", "home_spread", "total", "home_ml", "away_ml", "odds_source"]
     if snaps.empty:
         return pd.DataFrame(columns=cols)
+    # SQLite returns object columns when every value is NULL. Keep missing lines numeric
+    # so team-perspective negation, grading and all-NULL aggregates remain well-defined.
+    for col in ("home_spread", "total", "home_ml", "away_ml"):
+        snaps[col] = pd.to_numeric(snaps[col], errors="coerce")
     snaps = snaps.sort_values("pulled_at").drop_duplicates(["game_id", "source", "book"], keep="last")
     api = snaps[snaps.source == "oddsapi"]
     api = api.groupby("game_id").agg(

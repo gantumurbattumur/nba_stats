@@ -158,7 +158,7 @@ def lean_history(conn, season: str, results: pd.DataFrame | None = None) -> pd.D
                 r = results[(results.prediction_origin == origin) & (results[f"{market}_label"] == label)] if not results.empty else results
                 hits = r[f"{market}_hit"].dropna() if not r.empty else pd.Series(dtype=float)
                 n = len(hits)
-                rows.append(dict(season=season, evaluation="in-sample" if in_sample else "pre-date",
+                rows.append(dict(season=season, evaluation="in-sample" if origin == "in-sample" else "pre-date",
                                  origin=origin, market=market, label=label, n=n,
                                  hit_rate=float(hits.mean()) if n else np.nan, small_sample=n < 30))
     return pd.DataFrame(rows)

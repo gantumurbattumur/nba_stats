@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-DISCLAIMER = "Analysis only — no bets placed. Model-vs-market comparisons for data-engineering study."
+DISCLAIMER = "Analysis only — no bets placed"
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
