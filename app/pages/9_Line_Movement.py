@@ -16,8 +16,6 @@ from nba_predict.analysis.line_movement import line_moves, summarize_moves  # no
 
 st.set_page_config(page_title="Line movement", layout="wide")
 header("Line movement", "Opening vs closing ESPN lines (home-perspective spread).")
-st.warning("Small sample: only about 250 games have opening lines — all early 2025-26 (Oct 21 – Nov 24), "
-           "ESPN BET via the core-API fallback. `nba espn --with-open` adds opening lines for other dates.")
 
 c = sqlite3.connect(Path(db_path()).resolve().as_uri() + "?mode=ro", uri=True)
 try:
@@ -29,6 +27,8 @@ if d.empty:
     st.stop()
 
 st.markdown(f"**{len(d)} games** · {d.book.nunique()} book(s): {', '.join(sorted(d.book.unique()))}")
+st.caption(f"Opening/closing pairs cover {d.game_date.min()} through {d.game_date.max()}. "
+           "Coverage depends on the available ESPN core data. `nba espn --with-open` collects opening lines.")
 sp, tt = summarize_moves(d)
 c1, c2 = st.columns(2)
 c1.subheader("Spread: did the side the line moved toward cover?")

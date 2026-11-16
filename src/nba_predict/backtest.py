@@ -9,7 +9,7 @@ log_loss_market_games, mae_gap (model − market margin MAE, + CI), n_spread_gam
 side evaluation at the spec rule (edge >= edge_threshold, one side per market, a hypothetical
 1 unit at the closing price): n_flags, hit_rate, roi. Model ``market``: n, market_log_loss,
 market_margin_mae. Window models (segment all) add hca, effective_hca, split_weight,
-elo_prior_games. These are model-evaluation metrics only — nothing is staked.
+elo_prior_games. These are model-evaluation metrics only.
 """
 
 from __future__ import annotations

@@ -9,33 +9,51 @@ import pandas as pd
 
 
 def line_moves(conn: sqlite3.Connection) -> pd.DataFrame:
-    """One row per final game with ESPN open and close lines: moves (home perspective), which side
-    the spread moved toward, and whether that side covered the closing and the opening spread."""
+    """One row per final game: earliest open/latest close from the same ESPN provider.
+    If multiple providers have pairs, use the most recently closed pair. Missing lines stay unknown.
+    """
     d = pd.read_sql_query(
-        """select g.game_id, g.season, g.game_date, g.home_team_id, g.away_team_id, g.home_pts, g.away_pts,
+        """with snapshots as (
+               select *, row_number() over (
+                   partition by game_id, book, is_closing
+                   order by case when is_closing = 0 then pulled_at end asc,
+                            case when is_closing = 1 then pulled_at end desc, id desc
+               ) as snapshot_rank
+               from odds_snapshots where source = 'espn'
+           ), pairs as (
+           select g.game_id, g.season, g.game_date, g.home_team_id, g.away_team_id, g.home_pts, g.away_pts,
                   o.book, o.home_spread open_spread, o.total open_total, c.home_spread close_spread,
-                  c.total close_total
+                  c.total close_total,
+                  row_number() over (partition by g.game_id order by c.pulled_at desc, c.id desc) as pair_rank
            from games g
-           join odds_snapshots o on o.game_id = g.game_id and o.source = 'espn' and o.is_closing = 0
-           join odds_snapshots c on c.game_id = g.game_id and c.source = 'espn' and c.is_closing = 1
-           where g.status = 'final'""", conn)
+           join snapshots o on o.game_id = g.game_id and o.is_closing = 0 and o.snapshot_rank = 1
+           join snapshots c on c.game_id = g.game_id and c.is_closing = 1 and c.snapshot_rank = 1
+                            and c.book = o.book and c.pulled_at >= o.pulled_at
+           where g.status = 'final'
+           ) select * from pairs where pair_rank = 1""", conn).drop(columns="pair_rank")
     if d.empty:
         return d
+    for col in ("open_spread", "close_spread", "open_total", "close_total"):
+        d[col] = pd.to_numeric(d[col], errors="coerce")
     d["margin"] = d.home_pts - d.away_pts
     d["total_pts"] = d.home_pts + d.away_pts
     d["spread_move"] = d.close_spread - d.open_spread  # < 0: home became more favored
     d["total_move"] = d.close_total - d.open_total
-    d["moved_toward"] = np.select([d.spread_move < 0, d.spread_move > 0], ["home", "away"], "no move")
+    d["moved_toward"] = np.select([d.spread_move < 0, d.spread_move > 0, d.spread_move == 0],
+                                  ["home", "away", "no move"], "unknown")
     sign = np.where(d.moved_toward == "home", 1, -1)
 
     def covered(line):  # did the side the line moved toward cover `line` (home perspective)?
         diff = sign * (d.margin + line)
-        return np.select([diff > 0, diff < 0], ["cover", "no_cover"], "push")
+        return np.where(line.notna(), np.select([diff > 0, diff < 0], ["cover", "no_cover"], "push"), None)
 
-    d["cover_close"] = np.where(d.moved_toward == "no move", None, covered(d.close_spread))
-    d["cover_open"] = np.where(d.moved_toward == "no move", None, covered(d.open_spread))
-    d["total_dir"] = np.select([d.total_move > 0, d.total_move < 0], ["up", "down"], "no move")
-    d["ou_close"] = np.select([d.total_pts > d.close_total, d.total_pts < d.close_total], ["over", "under"], "push")
+    directed = d.moved_toward.isin(["home", "away"])
+    d["cover_close"] = np.where(directed, covered(d.close_spread), None)
+    d["cover_open"] = np.where(directed, covered(d.open_spread), None)
+    d["total_dir"] = np.select([d.total_move > 0, d.total_move < 0, d.total_move == 0],
+                               ["up", "down", "no move"], "unknown")
+    d["ou_close"] = np.where(d.close_total.notna(), np.select(
+        [d.total_pts > d.close_total, d.total_pts < d.close_total], ["over", "under"], "push"), None)
     return d
 
 

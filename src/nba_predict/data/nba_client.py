@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 import time
 import warnings
 from collections.abc import Callable
@@ -35,7 +36,7 @@ def _status(status_id: int | None, text: str | None) -> str:
     return "final" if status_id == 3 else "scheduled"
 
 
-_ET_TIME = __import__("re").compile(r"^\s*(\d{1,2}):(\d{2})\s*([ap])m\s*ET\s*$", 2)
+_ET_TIME = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*([ap])m\s*ET\s*$", re.IGNORECASE)
 
 
 def start_time_from_status(game_date: str, status_text: str | None) -> str | None:

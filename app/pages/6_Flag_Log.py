@@ -27,10 +27,16 @@ if f.empty:
 
 c1, c2, c3 = st.columns(3)
 d = pd.to_datetime(f.game_date)
-lo, hi = c1.date_input("Dates", (d.min().date(), d.max().date()), key="fl_dates")
+dates = c1.date_input("Dates", (d.min().date(), d.max().date()), key="fl_dates")
 markets = c2.multiselect("Market", ["ml", "spread", "total"], default=["ml", "spread", "total"], key="fl_mk")
 models = c3.multiselect("Model", sorted(f.model.unique()), default=sorted(f.model.unique()), key="fl_models")
-f = f[(d >= pd.Timestamp(lo)) & (d <= pd.Timestamp(hi)) & f.market.isin(markets) & f.model.isin(models)]
+mask = f.market.isin(markets) & f.model.isin(models)
+if len(dates) == 2:
+    lo, hi = dates
+    mask &= (d >= pd.Timestamp(lo)) & (d <= pd.Timestamp(hi))
+else:
+    c1.info("Choose both a start and an end date to apply the date filter.")
+f = f[mask]
 g = f[f.result.notna()]
 w, lo_, p = (g.result == "win").sum(), (g.result == "loss").sum(), (g.result == "push").sum()
 k = st.columns(5)

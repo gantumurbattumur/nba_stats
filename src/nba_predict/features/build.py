@@ -230,11 +230,9 @@ def load_features(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataF
     return build_feature_table(conn, windows)
 
 
-def team_profile(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int | None,
-                 venue: str = "all", spec: FilterSpec | None = None) -> dict[str, float]:
-    """Slow per-call profile of a team's games before ``as_of`` (``n=None`` = season-to-date),
-    optionally restricted by ``venue`` and an extra ``FilterSpec``. Same window rule as the
-    feature table. Returns metric keys + ``gp``, ``sos``, ``adjnet``."""
+def team_profile_games(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int | None,
+                       venue: str = "all", spec: FilterSpec | None = None) -> pd.DataFrame:
+    """Exact input rows for a profile, shared with the dashboard's input audit table."""
     team = by_abbr(team_abbr)
     g = enriched[(enriched.team_id == team.nba_id) & (enriched.game_date < as_of.isoformat())]
     if venue != "all":
@@ -250,6 +248,15 @@ def team_profile(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int 
         sel = g.tail(n)
     else:
         sel = in_season.tail(n)
+    return sel
+
+
+def team_profile(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int | None,
+                 venue: str = "all", spec: FilterSpec | None = None) -> dict[str, float]:
+    """Slow per-call profile of a team's games before ``as_of`` (``n=None`` = season-to-date),
+    optionally restricted by ``venue`` and an extra ``FilterSpec``. Same window rule as the
+    feature table. Returns metric keys + ``gp``, ``sos``, ``adjnet``."""
+    sel = team_profile_games(enriched, team_abbr, as_of, n, venue, spec)
     keys = [k for k in METRICS if k != "sos"]
     row = aggregate(sel, keys).iloc[0].to_dict()
     sos = sel.opp_net_pre.dropna()

@@ -1,5 +1,5 @@
 """Pure odds functions (American odds). Analysis only: ``unit_return`` evaluates a
-hypothetical 1-unit flag; nothing here sizes stakes."""
+hypothetical 1-unit flag, for model evaluation only."""
 
 from __future__ import annotations
 

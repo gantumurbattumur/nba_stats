@@ -35,8 +35,12 @@ else:
     if "game_date" in df and total:
         d = pd.to_datetime(df.game_date, errors="coerce")
         if d.notna().any():
-            lo, hi = sb.date_input("Game dates", (d.min().date(), d.max().date()), key="data_dates")
-            df = df[(d >= pd.Timestamp(lo)) & (d <= pd.Timestamp(hi))] if lo and hi else df
+            dates = sb.date_input("Game dates", (d.min().date(), d.max().date()), key="data_dates")
+            if len(dates) == 2:
+                lo, hi = dates
+                df = df[(d >= pd.Timestamp(lo)) & (d <= pd.Timestamp(hi))]
+            else:
+                sb.info("Choose both a start and an end date to apply the date filter.")
     text = sb.text_input("Contains (any column)", key="data_text")
     if text:
         df = df[df.astype(str).apply(lambda c: c.str.contains(text, case=False, regex=False)).any(axis=1)]
