@@ -22,7 +22,18 @@ def _clean(v):
     return None if v is None or (isinstance(v, float) and not np.isfinite(v)) else float(v)
 
 
-def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window", "ml")) -> pd.DataFrame:
+def _after_tip(start_iso, status, now: dt.datetime):
+    """1 if the game had started (or finished) at ``now``, 0 if not, None if unknown."""
+    if status == "final":
+        return 1
+    if not start_iso:
+        return None
+    start = dt.datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
+    return int(now >= start)
+
+
+def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window", "ml"),
+                 now: dt.datetime | None = None) -> pd.DataFrame:
     """Fit each model on final games before ``date``, predict that date's (non-postponed) games and
     upsert ``predictions`` (one row per game × model; re-predict replaces). ``params_json`` holds
     the fitted params, sigma/sigma_total (used for spread/total probabilities) and training info."""
@@ -38,6 +49,9 @@ def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window
     if target.empty or len(train) < 10:
         return pd.DataFrame(columns=["game_id", "model", "home_win_prob", "pred_margin", "pred_total"])
     info = {"train_games": int(len(train)), "train_max_date": train.game_date.max()}
+    now = now or dt.datetime.now(dt.UTC)
+    tips = {r[0]: _after_tip(r[1], r[2], now) for r in conn.execute(
+        "select game_id, start_time_utc, status from games where game_date = ?", (ds,))}
     outs = []
     for m in models:
         if m == "elo":
@@ -58,10 +72,11 @@ def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window
             raise ValueError(f"unknown model {m!r}")
         pred = pred.assign(model=m)
         pj = json.dumps({**params, **info}, default=float)
-        now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
-        upsert(conn, "predictions", [dict(game_id=r.game_id, model=m, created_at=now,
+        created = now.astimezone(dt.UTC).isoformat(timespec="seconds")
+        upsert(conn, "predictions", [dict(game_id=r.game_id, model=m, created_at=created,
                                           home_win_prob=_clean(r.home_win_prob), pred_margin=_clean(r.pred_margin),
-                                          pred_total=_clean(r.pred_total), params_json=pj)
+                                          pred_total=_clean(r.pred_total), params_json=pj,
+                                          made_after_tip=tips.get(r.game_id))
                                      for r in pred.itertuples(index=False)], ["game_id", "model"])
         outs.append(pred)
     return pd.concat(outs, ignore_index=True)[["game_id", "model", "home_win_prob", "pred_margin", "pred_total"]]

@@ -132,11 +132,12 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
     rows = client.slate(date)
     sql = """
         INSERT INTO games (game_id, season, game_date, home_team_id, away_team_id, status,
-                           season_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+                           season_type, start_time_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (game_id) DO UPDATE SET
             game_date = excluded.game_date, home_team_id = excluded.home_team_id,
-            away_team_id = excluded.away_team_id, status = excluded.status
+            away_team_id = excluded.away_team_id, status = excluded.status,
+            start_time_utc = coalesce(excluded.start_time_utc, games.start_time_utc)
         WHERE games.status IS NOT 'final'
     """
     params = []
@@ -148,7 +149,7 @@ def ingest_slate(conn: sqlite3.Connection, client, date: dt.date) -> int:
         gdate = r["game_date"]
         params.append((r["game_id"], season_for_date(dt.date.fromisoformat(gdate)), gdate,
                        r["home_team_id"], r["away_team_id"], status,
-                       _PREFIX_TYPE.get(str(r["game_id"])[:3], "regular")))
+                       _PREFIX_TYPE.get(str(r["game_id"])[:3], "regular"), r.get("start_time_utc")))
     conn.executemany(sql, params)
     conn.commit()
     return len(params)
@@ -322,6 +323,9 @@ def ingest_odds(conn: sqlite3.Connection, client, closing: bool = False) -> int:
                             r["event_id"], away.abbr, home.abbr, gdate)
                 warned.add(r["event_id"])
             continue
+        tip_iso = tip.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn.execute("update games set start_time_utc = ? where game_id = ? and status != 'final'",
+                     (tip_iso, g[0]))  # the book's commence_time is the best tip-time source
         snaps.append(dict(game_id=g[0], source="oddsapi", book=r["book"], pulled_at=pulled_at,
                           is_closing=int(closing),
                           **{k: r[k] for k in ("home_ml", "away_ml", "home_spread", "home_spread_price",

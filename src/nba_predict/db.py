@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS games (
     status TEXT,
     espn_event_id TEXT,
     season_type TEXT NOT NULL DEFAULT 'regular',
-    espn_core_checked INTEGER NOT NULL DEFAULT 0  -- ESPN core odds API already queried
+    espn_core_checked INTEGER NOT NULL DEFAULT 0,  -- ESPN core odds API already queried
+    start_time_utc TEXT  -- scheduled tip (ISO UTC) from the scoreboard / Odds API; NULL if unknown
 );
 CREATE INDEX IF NOT EXISTS ix_games_date ON games(game_date);
 
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     pred_margin REAL,
     pred_total REAL,
     params_json TEXT,
+    made_after_tip INTEGER,  -- 1 if created_at >= the game's start time, 0 before, NULL unknown
     UNIQUE (game_id, model)
 );
 
@@ -161,6 +163,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     gcols = {r[1] for r in conn.execute("PRAGMA table_info(games)")}
     if "espn_core_checked" not in gcols:
         conn.execute("ALTER TABLE games ADD COLUMN espn_core_checked INTEGER NOT NULL DEFAULT 0")
+    if "start_time_utc" not in gcols:
+        conn.execute("ALTER TABLE games ADD COLUMN start_time_utc TEXT")
+    pcols = {r[1] for r in conn.execute("PRAGMA table_info(predictions)")}
+    if "made_after_tip" not in pcols:
+        conn.execute("ALTER TABLE predictions ADD COLUMN made_after_tip INTEGER")
     bt = {r[1] for r in conn.execute("PRAGMA table_info(backtest_results)")}
     if "segment" not in bt:
         conn.execute("ALTER TABLE backtest_results ADD COLUMN segment TEXT NOT NULL DEFAULT 'all'")

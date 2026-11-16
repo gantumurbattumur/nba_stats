@@ -35,6 +35,20 @@ def _status(status_id: int | None, text: str | None) -> str:
     return "final" if status_id == 3 else "scheduled"
 
 
+_ET_TIME = __import__("re").compile(r"^\s*(\d{1,2}):(\d{2})\s*([ap])m\s*ET\s*$", 2)
+
+
+def start_time_from_status(game_date: str, status_text: str | None) -> str | None:
+    """ScoreboardV2 shows a future game's tip as GAME_STATUS_TEXT '7:30 pm ET' → ISO UTC."""
+    m = _ET_TIME.match(status_text or "")
+    if not m:
+        return None
+    h, mi = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0), int(m.group(2))
+    d = dt.date.fromisoformat(game_date[:10])
+    t = dt.datetime(d.year, d.month, d.day, h, mi, tzinfo=ET).astimezone(dt.UTC)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class NbaClient:
     def __init__(self, delay_s: float, retries: int = 3, timeout: int = 30):
         self.delay_s = delay_s
@@ -85,6 +99,8 @@ class NbaClient:
                 home_team_id=int(g["homeTeam"]["teamId"]),
                 away_team_id=int(g["awayTeam"]["teamId"]),
                 status=_status(g.get("gameStatus"), g.get("gameStatusText")),
+                start_time_utc=(g.get("gameTimeUTC")
+                                or start_time_from_status(board["gameDate"], g.get("gameStatusText"))),
             )
             for g in board["games"]
         ]
@@ -102,6 +118,7 @@ class NbaClient:
                 home_team_id=int(r.HOME_TEAM_ID),
                 away_team_id=int(r.VISITOR_TEAM_ID),
                 status=_status(int(r.GAME_STATUS_ID), r.GAME_STATUS_TEXT),
+                start_time_utc=start_time_from_status(str(r.GAME_DATE_EST), r.GAME_STATUS_TEXT),
             )
             for r in gh.drop_duplicates("GAME_ID").itertuples()
         ]

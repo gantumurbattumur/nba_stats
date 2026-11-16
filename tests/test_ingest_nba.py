@@ -214,7 +214,8 @@ def test_live_slate_used_for_today(monkeypatch):
     monkeypatch.setattr(NbaClient, "_v2_slate", lambda self, d: pytest.fail("V2 not expected"))
     assert NbaClient(delay_s=0).slate(date(2026, 11, 15)) == [dict(
         game_id="0022600240", game_date="2026-11-15", home_team_id=1610612738,
-        away_team_id=1610612742, status="scheduled")]
+        away_team_id=1610612742, status="scheduled",
+        start_time_utc="2026-11-16T00:30:00Z")]
 
 
 def test_slate_skips_preseason_and_all_star(conn, fake_client):

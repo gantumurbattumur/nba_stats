@@ -157,3 +157,84 @@ def test_open_rows_do_not_change_enriched_fingerprint(fixture_db):
                                                home_spread=-9.5, total=250.0)],
            ["game_id", "source", "book", "pulled_at"])
     assert source_fingerprint(fixture_db) == fp and features_fingerprint(fixture_db, (5,)) == ffp
+
+
+# --- B phase 3: predictions / flags after tip-off ------------------------------------------------
+
+import datetime as dt
+
+
+def test_v2_status_text_start_time():
+    from nba_predict.data.nba_client import start_time_from_status
+    # 7:30 pm ET on 2026-11-15 (EST, UTC-5) -> 00:30Z next day
+    assert start_time_from_status("2026-11-15", "7:30 pm ET") == "2026-11-16T00:30:00Z"
+    assert start_time_from_status("2026-10-22", "10:00 pm ET") == "2026-10-23T02:00:00Z"  # EDT
+    assert start_time_from_status("2026-11-15", "Final") is None
+
+
+def test_live_slate_carries_start_time(monkeypatch):
+    from nba_predict.data import nba_client
+    from nba_predict.data.nba_client import NbaClient
+
+    monkeypatch.setattr(nba_client.time, "sleep", lambda s: None)
+    monkeypatch.setattr(nba_client, "today_et", lambda: date(2026, 11, 15))
+
+    class Board:
+        def __init__(self, *a, **k): pass
+        def get_dict(self):
+            return {"scoreboard": {"gameDate": "2026-11-15", "games": [
+                {"gameId": "0022600240", "homeTeam": {"teamId": 1}, "awayTeam": {"teamId": 2},
+                 "gameStatus": 2, "gameStatusText": "Q2 5:00", "gameTimeUTC": "2026-11-16T00:30:00Z"}]}}
+
+    monkeypatch.setattr(nba_client.scoreboard, "ScoreBoard", Board)
+    r = NbaClient(delay_s=0).slate(date(2026, 11, 15))[0]
+    assert r["start_time_utc"] == "2026-11-16T00:30:00Z" and r["status"] == "scheduled"
+
+
+def test_slate_and_odds_store_start_time(conn, fake_client):
+    from nba_predict.ingest import ingest_slate
+    fake_client.slate_rows = [dict(game_id="0022600240", game_date="2026-11-15", home_team_id=1610612738,
+                                   away_team_id=1610612742, status="scheduled",
+                                   start_time_utc="2026-11-16T00:30:00Z")]
+    ingest_slate(conn, fake_client, date(2026, 11, 15))
+    assert conn.execute("select start_time_utc from games").fetchone()[0] == "2026-11-16T00:30:00Z"
+
+
+def _tip(conn, gid, iso):
+    conn.execute("update games set start_time_utc = ? where game_id = ?", (iso, gid))
+    conn.commit()
+
+
+def test_predictions_marked_made_after_tip(fixture_db):
+    from nba_predict.predict import predict_date
+    other = "0022599001"
+    _tip(fixture_db, G, "2025-11-11T00:00:00Z")
+    _tip(fixture_db, other, "2025-11-11T03:00:00Z")
+    predict_date(fixture_db, D, models=("elo",), now=dt.datetime(2025, 11, 11, 1, 0, tzinfo=dt.UTC))
+    got = dict(fixture_db.execute("select game_id, made_after_tip from predictions where model='elo'"))
+    assert got == {G: 1, other: 0}
+
+
+def test_made_after_tip_unknown_start_is_null(fixture_db):
+    from nba_predict.predict import predict_date
+    predict_date(fixture_db, D, models=("elo",), now=dt.datetime(2025, 11, 11, 1, 0, tzinfo=dt.UTC))
+    assert {r[0] for r in fixture_db.execute("select made_after_tip from predictions")} == {None}
+
+
+def test_never_flag_a_game_that_has_started(fixture_db):
+    # status is still 'scheduled' (slate maps in-progress -> scheduled and may lag), but tip passed
+    _snap(fixture_db, home_ml=-110, away_ml=-110)
+    _pred(fixture_db, p=0.7)
+    _tip(fixture_db, G, "2025-11-11T00:00:00Z")
+    out = flag_values(fixture_db, D, model="window", now=dt.datetime(2025, 11, 11, 0, 5, tzinfo=dt.UTC))
+    assert out.empty
+    out = flag_values(fixture_db, D, model="window", now=dt.datetime(2025, 11, 10, 23, 0, tzinfo=dt.UTC))
+    assert len(out) == 1
+
+
+def test_never_flag_a_prediction_made_after_tip(fixture_db):
+    _snap(fixture_db, home_ml=-110, away_ml=-110)
+    _pred(fixture_db, p=0.7)
+    fixture_db.execute("update predictions set made_after_tip = 1 where game_id = ?", (G,))
+    fixture_db.commit()
+    assert flag_values(fixture_db, D, model="window").empty

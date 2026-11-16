@@ -127,11 +127,14 @@ def pick_flags(evals: list[dict], threshold: float) -> list[dict]:
 
 # --- logging and grading value flags (Task 13) -------------------------------------------------
 
-def flag_values(conn: sqlite3.Connection, date, model: str | None = None):
+def flag_values(conn: sqlite3.Connection, date, model: str | None = None, now=None):
     """Record model-vs-market disagreements for ``date``'s games: for each market, the side with the
     higher edge if ``edge >= edge_threshold``. Re-running replaces that game's *unsettled* flags
     (so both sides of a market are never flagged); settled flags are never touched. Games without
-    any snapshot are skipped. ``model`` defaults to ``backtest.best_model``."""
+    any snapshot are skipped. ``model`` defaults to ``backtest.best_model``. A game that has
+    started is never flagged: ``status='scheduled'`` alone doesn't prove that (the slate maps
+    in-progress games to scheduled and may lag), so games past ``start_time_utc`` at ``now`` and
+    predictions stamped ``made_after_tip`` are skipped."""
     import datetime as dt
     import json
 
@@ -143,11 +146,14 @@ def flag_values(conn: sqlite3.Connection, date, model: str | None = None):
 
     model = model or best_model(conn)
     thr = get_settings().edge_threshold
+    now_dt = (now or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
+    now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = conn.execute(
         "select p.game_id, p.home_win_prob, p.pred_margin, p.pred_total, p.params_json from predictions p "
-        "join games g using (game_id) where g.game_date = ? and p.model = ? and g.status = 'scheduled'",
-        (date.isoformat(), model)).fetchall()
-    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        "join games g using (game_id) where g.game_date = ? and p.model = ? and g.status = 'scheduled' "
+        "and coalesce(p.made_after_tip, 0) = 0 and (g.start_time_utc is null or g.start_time_utc > ?)",
+        (date.isoformat(), model, now_iso)).fetchall()
+    now = now_dt.isoformat(timespec="seconds")
     written = []
     for r in rows:
         mv = market_view(conn, r["game_id"])
