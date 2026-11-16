@@ -114,8 +114,10 @@ def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_col
     return m.predict(test), m.sigma, m.sigma_total, extra  # out-of-fold sigmas
 
 
-def _flag_eval(conn, rows: pd.DataFrame, threshold: float, mv_cache: dict) -> dict[str, float]:
-    """rows: game_id, home_pts, away_pts, home_win_prob, pred_margin, pred_total, sigma, sigma_total."""
+def _flag_eval(conn, rows: pd.DataFrame, threshold: float, mv_cache: dict,
+               sink: list | None = None) -> dict[str, float]:
+    """rows: game_id, home_pts, away_pts, home_win_prob, pred_margin, pred_total, sigma, sigma_total.
+    ``sink`` (optional) collects one dict per evaluated flag for ``backtest_flags``."""
     units, wins, losses = [], 0, 0
     for r in rows.itertuples(index=False):
         if r.game_id not in mv_cache:
@@ -129,6 +131,10 @@ def _flag_eval(conn, rows: pd.DataFrame, threshold: float, mv_cache: dict) -> di
                 continue
             res = settle(fl["market"], fl["side"], fl["line"], r.home_pts, r.away_pts)
             units.append(unit_return(fl["price"], res))
+            if sink is not None:
+                sink.append(dict(game_id=r.game_id, market=fl["market"], side=fl["side"], line=fl["line"],
+                                 price=fl["price"], model_prob=fl["model_prob"], market_prob=fl["market_prob"],
+                                 edge=fl["edge"], result=res, units=units[-1]))
             wins += res == "win"
             losses += res == "loss"
     n = len(units)
@@ -151,7 +157,8 @@ def _ll_per_game(p, y) -> np.ndarray:
     return -(y * np.log(p) + (1 - y) * np.log(1 - p))
 
 
-def _block(d: pd.DataFrame, conn, threshold: float, mv_cache: dict, rng, n_boot: int) -> dict[str, float]:
+def _block(d: pd.DataFrame, conn, threshold: float, mv_cache: dict, rng, n_boot: int,
+           sink: list | None = None) -> dict[str, float]:
     """All metrics for one (model, season, segment) on merged truth+prediction rows ``d``."""
     y, p = d.home_win.to_numpy(dtype=float), d.home_win_prob.to_numpy(dtype=float)
     ll = _ll_per_game(p, y)
@@ -167,7 +174,7 @@ def _block(d: pd.DataFrame, conn, threshold: float, mv_cache: dict, rng, n_boot:
     mk = d.m_home_novig.notna().to_numpy()
     if mk.any():
         met["log_loss_market_games"] = float(ll[mk].mean())
-        met.update(_flag_eval(conn, d[mk], threshold, mv_cache))
+        met.update(_flag_eval(conn, d[mk], threshold, mv_cache, sink))
     sp = d.m_home_spread.notna().to_numpy()
     if sp.any():
         gap = ae[sp] - np.abs(d.margin.to_numpy(dtype=float)[sp] + d.m_home_spread.to_numpy(dtype=float)[sp])
@@ -216,6 +223,9 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
     models = list(CORE_MODELS) + ["window_noprior"] + (["ml_base"] if custom else [])
     mv_cache: dict = {}
     out: list[tuple] = []
+    pred_rows: list[tuple] = []
+    flag_rows: list[dict] = []
+    gdate = dict(zip(f.game_id, f.game_date))
     plan = [(sz, "test") for sz in test_seasons] + [(sz, "holdout") for sz in holdout]
     for season, role in plan:
         sf = final[final.season == season]
@@ -246,10 +256,15 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
             if not preds[m]:
                 continue
             d = truth.merge(pd.concat(preds[m], ignore_index=True), on="game_id")
+            pred_rows += [(m, season, role, r.game_id, gdate[r.game_id], r.home_win_prob, r.pred_margin,
+                           r.pred_total) for r in d.itertuples(index=False)]
             for seg, mask in _segments(d):
                 if not mask.any():
                     continue
-                met = _block(d[mask], conn, s.edge_threshold, mv_cache, rng, n_boot)
+                sink: list | None = [] if seg == "all" else None
+                met = _block(d[mask], conn, s.edge_threshold, mv_cache, rng, n_boot, sink)
+                flag_rows += [dict(model=m, season=season, role=role, game_date=gdate[x["game_id"]], **x)
+                              for x in (sink or [])]
                 if seg == "all":
                     for k in sorted({k for e in extras[m] for k in e}):
                         met[k] = float(np.mean([e[k] for e in extras[m] if k in e]))
@@ -259,6 +274,16 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
     conn.executemany(
         "insert into backtest_results (run_at, model, season, metric, value, segment, role) "
         "values (?,?,?,?,?,?,?)", [(run_at, *r) for r in out])
+    # per-game / per-flag detail of the latest run only (dashboard: edge buckets, rolling MAE)
+    conn.execute("delete from backtest_predictions")
+    conn.execute("delete from backtest_flags")
+    conn.executemany("insert into backtest_predictions (run_at, model, season, role, game_id, game_date, "
+                     "home_win_prob, pred_margin, pred_total) values (?,?,?,?,?,?,?,?,?)",
+                     [(run_at, *r) for r in pred_rows])
+    cols = ["model", "season", "role", "game_id", "game_date", "market", "side", "line", "price",
+            "model_prob", "market_prob", "edge", "result", "units"]
+    conn.executemany(f"insert into backtest_flags (run_at, {', '.join(cols)}) values ({', '.join('?' * (len(cols) + 1))})",
+                     [(run_at, *(fr[c] for c in cols)) for fr in flag_rows])
     conn.commit()
     return res
 

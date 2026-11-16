@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS custom_features (
     created_at TEXT
 );
 
+-- per-game predictions and per-flag outcomes of the *latest* backtest run (replaced each run)
+CREATE TABLE IF NOT EXISTS backtest_predictions (
+    run_at TEXT, model TEXT, season TEXT, role TEXT, game_id TEXT, game_date TEXT,
+    home_win_prob REAL, pred_margin REAL, pred_total REAL
+);
+CREATE TABLE IF NOT EXISTS backtest_flags (
+    run_at TEXT, model TEXT, season TEXT, role TEXT, game_id TEXT, game_date TEXT,
+    market TEXT, side TEXT, line REAL, price INTEGER, model_prob REAL, market_prob REAL,
+    edge REAL, result TEXT, units REAL  -- units: hypothetical 1-unit return, evaluation only
+);
+
 -- fingerprint of the source rows each derived (pandas-written) table was built from
 CREATE TABLE IF NOT EXISTS derived_meta (
     name TEXT PRIMARY KEY,

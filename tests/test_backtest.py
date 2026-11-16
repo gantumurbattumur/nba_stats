@@ -119,3 +119,20 @@ def test_holdout_reported_never_fitted_or_selected(fixture_db, feats, monkeypatc
     assert set(out.role) == {"holdout"} and set(out.season) == {"2025-26"}
     assert len(fit_max_dates) == 1 and fit_max_dates[0] < "2025-10-21"  # one frozen fit, pre-season
     assert backtest.best_model(fixture_db) == "window"  # holdout rows never select a model
+
+
+def test_backtest_stores_latest_flags_and_predictions(fixture_db, feats):
+    out = backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=20)
+    s2 = feats[(feats.season == "2025-26") & feats.home_win.notna()]
+    models = set(out[out.model != "market"].model)
+    preds = fixture_db.execute("select model, count(*), count(distinct run_at) from backtest_predictions "
+                               "group by model").fetchall()
+    assert {r[0] for r in preds} == models and all(r[1] == len(s2) and r[2] == 1 for r in preds)
+    nf = out[(out.metric == "n_flags") & (out.segment == "all")].set_index("model").value
+    got = dict(fixture_db.execute("select model, count(*) from backtest_flags group by model").fetchall())
+    assert {m: float(got.get(m, 0)) for m in nf.index} == nf.to_dict()
+    row = dict(fixture_db.execute("select * from backtest_flags limit 1").fetchone())
+    assert {"edge", "model_prob", "market_prob", "result", "units", "market", "side", "game_date"} <= set(row)
+    backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=20)  # replaces, never accumulates
+    assert fixture_db.execute("select count(distinct run_at) from backtest_flags").fetchone()[0] == 1
+    assert fixture_db.execute("select count(*) from backtest_predictions").fetchone()[0] == len(s2) * len(models)
