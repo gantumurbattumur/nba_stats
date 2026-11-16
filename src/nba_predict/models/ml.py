@@ -12,6 +12,8 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from nba_predict.config import model_scope
+
 BASE_EXTRA = ["elo_prob", "elo_margin", "h_rest", "a_rest", "h_b2b", "a_b2b"]
 _L_GP = re.compile(r"^([ha])_all_l(\d+)_gp$")
 
@@ -142,8 +144,11 @@ class MLModel:
                 best = (loss, v, oof)
         return (best[1], best[2]) if best else (None, None)
 
-    def fit(self, df: pd.DataFrame) -> "MLModel":
+    def fit(self, df: pd.DataFrame, *, all_seasons: bool = False) -> "MLModel":
+        df = model_scope(df, all_seasons=all_seasons)
         d = df[df["home_win"].notna()]
+        if d.empty:
+            raise ValueError("No training games in the configured model seasons")
         if "game_date" in d:
             d = d.sort_values("game_date", kind="stable")
         X = self._X(d)

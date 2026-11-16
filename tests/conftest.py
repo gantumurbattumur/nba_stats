@@ -204,7 +204,7 @@ def build_league(conn) -> None:
 
 
 @pytest.fixture
-def fixture_db(conn):
+def fixture_db(conn, monkeypatch):
     """Deterministic 4-team league (BOS, NYK, LAL, DEN; real nba ids), seasons 2024-25 and
     2025-26, 24 final games each (12 dates, 2 games per date, every team plays every date,
     each pair meets 4x with home/away alternating), ESPN closing lines on 2025-26 only,
@@ -223,6 +223,10 @@ def fixture_db(conn):
     114.7776, pace = 97.58, efg = (40 + 5)/84, orb_pct = 8/(8 + 32) = 0.2, ftr = 17/84.
     Game 2 is the 2nd day in a row (rest_days 0, b2b); game 3 has rest_days 1.
     """
+    from nba_predict.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "model_seasons", SEASONS)
+    monkeypatch.setattr(get_settings(), "train_seasons", (SEASONS[0],))
     build_league(conn)
     return conn
 

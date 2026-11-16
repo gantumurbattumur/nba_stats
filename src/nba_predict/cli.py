@@ -183,6 +183,7 @@ def backtest_cmd(
     season: Annotated[list[str] | None, typer.Option("--season", help="test season; repeatable")] = None,
     holdout: Annotated[list[str] | None, typer.Option("--holdout", help="reported-only season; repeatable")] = None,
     n_boot: Annotated[int, typer.Option("--n-boot", help="bootstrap resamples for CIs")] = 1000,
+    all_seasons: Annotated[bool, typer.Option("--all-seasons", help="Use all history with monthly refits")] = False,
 ) -> None:
     """Walk-forward backtest of all models; prints metric × model per season (evaluation only)."""
     import pandas as pd
@@ -190,8 +191,13 @@ def backtest_cmd(
     from nba_predict import backtest
 
     conn = _conn()
-    res = backtest.run(conn, test_seasons=tuple(season or ("2024-25", "2025-26")),
-                       holdout=tuple(holdout or ()), n_boot=n_boot)
+    settings = get_settings()
+    tests = tuple(season) if season else (("2024-25", "2025-26") if all_seasons else (settings.current_season,))
+    typer.echo("Seasons used: " + ("all available; monthly refits" if all_seasons else
+               f"models {', '.join(settings.model_seasons)}; fit {', '.join(settings.train_seasons)} (frozen)")
+               + f"; test {', '.join(tests) or 'none'}; holdout {', '.join(holdout or ()) or 'none'}")
+    res = backtest.run(conn, test_seasons=tests,
+                       holdout=tuple(holdout or ()), n_boot=n_boot, all_seasons=all_seasons)
     if res.empty:
         typer.echo("no results (no final games in the requested seasons?)")
         raise typer.Exit(1)
@@ -213,10 +219,20 @@ def backtest_cmd(
 
 @app.command()
 def odds(closing: Annotated[bool, typer.Option(help="mark this pull as the closing line (~30 min before tip)")] = False) -> None:
-    """Pull today's live odds from The Odds API (3 credits)."""
+    """Pull current odds: Odds API when configured, otherwise the free ESPN scoreboard."""
     from nba_predict.data.odds_client import OddsApiClient, OddsApiError
 
     conn = _conn()
+    if not get_settings().odds_api_key:
+        try:
+            n = ingest_mod.ingest_espn_scoreboard_odds(conn, today_et())
+        except IngestError as e:
+            typer.echo(f"odds: {e}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"odds: {n} ESPN pregame snapshots (no ODDS_API_KEY)")
+        if closing:
+            typer.echo("ESPN scoreboard snapshots remain current observations; closing lines come from finished-game ingest.")
+        return
     try:
         n = ingest_mod.ingest_odds(conn, OddsApiClient(get_settings().odds_api_key), closing=closing)
     except OddsApiError as e:
@@ -234,12 +250,13 @@ def _today_or(date: str | None) -> dt.date:
 
 
 @app.command()
-def predict(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), default today")] = None) -> None:
+def predict(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), default today")] = None,
+            all_seasons: Annotated[bool, typer.Option("--all-seasons", help="Use all history for analysis")] = False) -> None:
     """Fit elo/window/ml on games before the date and write predictions for that date's games."""
     from nba_predict.predict import predict_date
 
     d = _today_or(date)
-    out = predict_date(_conn(), d)
+    out = predict_date(_conn(), d, all_seasons=all_seasons)
     typer.echo(f"{d}: {out.game_id.nunique()} games x {out.model.nunique()} models predicted")
     if not out.empty:
         typer.echo(out.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
@@ -347,9 +364,14 @@ def daily(date: Annotated[str | None, typer.Option(help="YYYY-MM-DD (ET), defaul
             typer.echo(f"[{name}] skipped: {e}")
     have_odds = True
     try:
-        n = ingest_mod.ingest_odds(conn, OddsApiClient(s.odds_api_key))
-        typer.echo(f"[odds] {n} snapshots")
-    except OddsApiError as e:
+        if s.odds_api_key:
+            n = ingest_mod.ingest_odds(conn, OddsApiClient(s.odds_api_key))
+            typer.echo(f"[odds] {n} Odds API snapshots")
+        else:
+            n = ingest_mod.ingest_espn_scoreboard_odds(conn, d)
+            typer.echo(f"[odds] {n} ESPN pregame snapshots (no ODDS_API_KEY)")
+        have_odds = n > 0
+    except (OddsApiError, IngestError) as e:
         have_odds = False
         typer.echo(f"[odds] skipped: {e}")
     build_enriched(conn)

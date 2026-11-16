@@ -16,6 +16,9 @@ class _NoNba:
 
 
 class _NoEspn:
+    def scoreboard(self, d):
+        return {"events": []}
+
     def events(self, d):
         return []
 

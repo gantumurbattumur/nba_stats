@@ -88,8 +88,9 @@ def _elo_margin(df: pd.DataFrame) -> np.ndarray:
     return ((df.h_elo - df.a_elo + EloParams().home_adv) / 28.0).to_numpy(dtype=float)
 
 
-def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_cols, custom_cols):
+def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_cols, custom_cols, *, all_seasons=False):
     """→ (pred DataFrame, sigma, sigma_total, extra metrics dict)."""
+    scope_args = {"all_seasons": True} if all_seasons else {}
     extra: dict[str, float] = {}
     if name == "home_always":
         p, mg, tt = train.home_win.mean(), train.margin.mean(), train.total.mean()
@@ -104,12 +105,12 @@ def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_col
         base = wr.WindowParams()
         if name == "window_noprior":
             base = base.model_copy(update={"elo_prior_games": 0.0, "fit_elo_prior": False})
-        params = wr.fit(train, base)
+        params = wr.fit(train, base, **scope_args)
         extra = {"hca": params.hca, "effective_hca": effective_hca(train, params),
                  "split_weight": params.split_weight, "elo_prior_games": params.elo_prior_games}
         return wr.predict_rows(test, params), params.sigma, params.sigma_total, extra
     cols = feature_cols if name == "ml" else [c for c in feature_cols if c not in custom_cols]
-    m = ml_mod.MLModel(cols).fit(train)  # C/alpha tuned on forward date folds inside ``train``
+    m = ml_mod.MLModel(cols).fit(train, **scope_args)  # C/alpha tuned on forward date folds inside ``train``
     extra = {"C": m.C, "alpha": m.alpha, "alpha_total": m.alpha_total}
     return m.predict(test), m.sigma, m.sigma_total, extra  # out-of-fold sigmas
 
@@ -201,8 +202,8 @@ def _segments(t: pd.DataFrame):
     return (("all", np.ones(len(t), bool)), ("early", early), ("rest", ~early))
 
 
-def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: str = "monthly",
-        windows=None, holdout=(), n_boot: int = 1000, seed: int = 0) -> pd.DataFrame:
+def run(conn: sqlite3.Connection, test_seasons=None, refit: str = "monthly",
+        windows=None, holdout=(), n_boot: int = 1000, seed: int = 0, *, all_seasons: bool = False) -> pd.DataFrame:
     """Walk-forward over ``test_seasons`` (fit on all games before each month). ``holdout``
     seasons are scored with one frozen fit on games before the season starts; they are
     reported (``role='holdout'``) but never used by ``best_model``. Every metric is also
@@ -212,7 +213,9 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
         raise ValueError("only refit='monthly' is supported")
     s = get_settings()
     rng = np.random.default_rng(seed)
-    f = load_features(conn, windows or s.windows)
+    if test_seasons is None:
+        test_seasons = ("2024-25", "2025-26") if all_seasons else (s.current_season,)
+    f = load_features(conn, windows or s.windows, all_seasons=all_seasons)
     custom = _custom_model_cols(conn)
     if custom:
         f = with_custom(f, _db_path(conn), only_model=True)
@@ -231,7 +234,7 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
         sf = final[final.season == season]
         if sf.empty:
             continue
-        if role == "holdout":
+        if role == "holdout" or not all_seasons:
             chunks = [(sf.game_date.min(), sf)]
         else:
             chunks = [(f"{mo}-01", sf[sf.game_date.str[:7] == mo]) for mo in sorted(sf.game_date.str[:7].unique())]
@@ -239,11 +242,13 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
         extras = {m: [] for m in models}
         for start, test in chunks:
             train = trainable[trainable.game_date < start]
+            if not all_seasons:
+                train = train[train.season.isin(s.train_seasons) & (train.season != season)]
             if len(train) < 10 or train.home_win.nunique() < 2:
                 log.warning("backtest %s from %s: too little training data (%d games)", season, start, len(train))
                 continue
             for m in models:
-                pred, sig, sig_t, extra = _fit_predict(m, train, test, feature_cols, custom)
+                pred, sig, sig_t, extra = _fit_predict(m, train, test, feature_cols, custom, all_seasons=all_seasons)
                 preds[m].append(pred.assign(sigma=sig, sigma_total=sig_t))
                 extras[m].append(extra)
         truth = sf[["game_id", "home_win", "margin", "total", "m_home_novig", "m_home_spread",

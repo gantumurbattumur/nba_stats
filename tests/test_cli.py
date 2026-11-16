@@ -121,7 +121,7 @@ def test_features_command_always_rebuilds(cli_db, monkeypatch):
     for _ in range(2):
         r = CliRunner().invoke(cli.app, ["features", "--windows", "5,10"])
         assert r.exit_code == 0, r.output
-        assert "game_features: 50 rows" in r.output
+        assert "game_features: 26 rows" in r.output  # Only the configured model seasons.
     assert calls == ["e", ("f", (5, 10)), "e", ("f", (5, 10))]
     assert "h_all_l10_net" in {r[1] for r in sq.connect(cli_db).execute("pragma table_info(game_features)")}
 

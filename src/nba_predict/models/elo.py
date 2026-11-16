@@ -8,6 +8,8 @@ from __future__ import annotations
 import pandas as pd
 from pydantic import BaseModel
 
+from nba_predict.config import model_scope
+
 
 class EloParams(BaseModel):
     # tuned on 2023-24 final games only (log loss; grid k 20..40, home_adv 20..100). The plan's
@@ -26,11 +28,11 @@ def win_prob(h: float, a: float, p: EloParams) -> float:
     return 1.0 / (1.0 + 10 ** (-(h - a + p.home_adv) / 400.0))
 
 
-def run_elo(games: pd.DataFrame, params: EloParams = EloParams()) -> pd.DataFrame:
+def run_elo(games: pd.DataFrame, params: EloParams = EloParams(), *, all_seasons: bool = False) -> pd.DataFrame:
     """games: game_id, season, game_date, home_team_id, away_team_id, home_pts, away_pts, status.
     Returns game_id, h_elo, a_elo, elo_prob, elo_margin (pre-game)."""
     p = params
-    g = games.sort_values(["game_date", "game_id"], kind="stable")
+    g = model_scope(games, all_seasons=all_seasons).sort_values(["game_date", "game_id"], kind="stable")
     rating: dict[int, float] = {}
     last_season: dict[int, str] = {}
     rows = []

@@ -21,6 +21,8 @@ from pydantic import BaseModel, field_validator
 from scipy.optimize import minimize
 from scipy.stats import norm
 
+from nba_predict.config import model_scope
+
 RATING_METRICS = ("net", "ortg", "drtg", "pace")
 
 
@@ -152,11 +154,15 @@ def predict_profiles(h: dict, a: dict, h_sched: dict, a_sched: dict,
     return {k: float(out[k]) for k in ("home_win_prob", "pred_margin", "pred_total")}
 
 
-def fit(train: pd.DataFrame, base: WindowParams = WindowParams()) -> WindowParams:
+def fit(train: pd.DataFrame, base: WindowParams = WindowParams(), *,
+        all_seasons: bool = False) -> WindowParams:
     """Fit hca, b2b_pts, rest_pts, split_weight and window weights (softmax) on margin MSE;
     then sigma / sigma_total as the RMS of the residuals (not the std, which would hide a
     biased model's error)."""
+    train = model_scope(train, all_seasons=all_seasons)
     train = train[train["margin"].notna()]
+    if train.empty:
+        raise ValueError("No training games in the configured model seasons")
     wins = list(base.weights)
     harr = _side_arrays(train, "h", wins, base.use_sos)
     aarr = _side_arrays(train, "a", wins, base.use_sos)

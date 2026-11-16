@@ -335,3 +335,38 @@ def ingest_odds(conn: sqlite3.Connection, client, closing: bool = False) -> int:
                  (pulled_at, "oddsapi", usage.get("last"), usage.get("remaining")))
     conn.commit()
     return n
+
+
+def ingest_espn_scoreboard_odds(conn: sqlite3.Connection, date: dt.date, client=None) -> int:
+    """Match pregame ESPN scoreboard odds to scheduled games by both teams and ET date.
+
+    Observed timestamps are real UTC pull times; these snapshots are never closing lines.
+    """
+    from nba_predict.config import get_settings
+    from nba_predict.data.espn_client import EspnClient, parse_scoreboard_odds
+    from nba_predict.teams import by_espn_abbr
+
+    client = client or EspnClient(delay_s=get_settings().espn_delay_s)
+    data = client.scoreboard(date)
+    now = dt.datetime.now(dt.UTC)
+    snapshots = []
+    for row in parse_scoreboard_odds(data):
+        home, away = by_espn_abbr(row.pop("home_espn_abbr")), by_espn_abbr(row.pop("away_espn_abbr"))
+        if home is None or away is None or row.pop("game_date") != date.isoformat():
+            continue
+        tip = row.pop("start_time_utc")
+        if dt.datetime.fromisoformat(tip.replace("Z", "+00:00")) <= now:
+            continue
+        game = conn.execute("select game_id from games where game_date=? and home_team_id=? "
+                            "and away_team_id=? and status='scheduled'",
+                            (date.isoformat(), home.nba_id, away.nba_id)).fetchone()
+        if game is None:
+            continue
+        event_id = row.pop("espn_event_id")
+        conn.execute("update games set espn_event_id=?, start_time_utc=? where game_id=?",
+                     (event_id, tip, game[0]))
+        snapshots.append(dict(game_id=game[0], source="espn", is_closing=0,
+                              pulled_at=now.isoformat(timespec="microseconds"), **row))
+    n = upsert(conn, "odds_snapshots", snapshots, ["game_id", "source", "book", "pulled_at"])
+    conn.commit()
+    return n

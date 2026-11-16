@@ -156,11 +156,69 @@ class EspnClient:
                     time.sleep(2**attempt)
         raise IngestError(f"ESPN {path} {params} failed after {self.retries} attempts: {last}")
 
+    def scoreboard(self, date: dt.date) -> dict:
+        return self._get("scoreboard", {"dates": date.strftime("%Y%m%d")})
+
     def events(self, date: dt.date) -> list[dict]:
-        return parse_scoreboard(self._get("scoreboard", {"dates": date.strftime("%Y%m%d")}))
+        return parse_scoreboard(self.scoreboard(date))
 
     def summary(self, event_id: str) -> dict:
         return self._get("summary", {"event": str(event_id)})
 
     def core_odds(self, event_id: str) -> dict:
         return self._get("core-odds", {}, url=CORE_URL.format(event_id=event_id))
+
+
+def parse_scoreboard_odds(data: dict) -> list[dict]:
+    """Pregame scoreboard lines, including legacy and nested market fields.
+
+    Missing prices stay missing. The spread is normalized to the home perspective.
+    No in-progress or completed event is eligible.
+    """
+    out = []
+    for event in data.get("events") or []:
+        for comp in event.get("competitions") or []:
+            status = (comp.get("status") or event.get("status") or {}).get("type") or {}
+            if status.get("state") != "pre" or status.get("completed"):
+                continue
+            sides = {c.get("homeAway"): (c.get("team") or {}).get("abbreviation")
+                     for c in comp.get("competitors") or []}
+            tip = comp.get("date") or event.get("date")
+            if not tip:
+                continue
+            for item in comp.get("odds") or []:
+                fields = parse_pickcenter({"pickcenter": [item]}) or {"book": "espn"}
+                fields["book"] = (item.get("provider") or {}).get("name") or fields["book"]
+
+                def nested(market, side, key):
+                    value = (((item.get(market) or {}).get(side) or {}).get("close") or {}).get(key)
+                    if isinstance(value, str) and key == "line":
+                        value = value.lstrip("oOuU")
+                    return _american(value)
+
+                for key, market, side, field in (
+                    ("home_ml", "moneyline", "home", "odds"),
+                    ("away_ml", "moneyline", "away", "odds"),
+                    ("home_spread", "pointSpread", "home", "line"),
+                    ("home_spread_price", "pointSpread", "home", "odds"),
+                    ("away_spread_price", "pointSpread", "away", "odds"),
+                    ("total", "total", "over", "line"),
+                    ("over_price", "total", "over", "odds"),
+                    ("under_price", "total", "under", "odds"),
+                ):
+                    value = nested(market, side, field)
+                    if value is not None:
+                        fields[key] = value if field == "line" else _price(value)
+                # Legacy scoreboard magnitudes may use the favourite rather than home sign.
+                if nested("pointSpread", "home", "line") is None and fields.get("home_spread") is not None:
+                    h, a = item.get("homeTeamOdds") or {}, item.get("awayTeamOdds") or {}
+                    if h.get("favorite") is True:
+                        fields["home_spread"] = -abs(fields["home_spread"])
+                    elif a.get("favorite") is True:
+                        fields["home_spread"] = abs(fields["home_spread"])
+                if not any(v is not None for k, v in fields.items() if k != "book"):
+                    continue
+                out.append(dict(espn_event_id=str(event["id"]), game_date=_et_date(tip),
+                                start_time_utc=tip, home_espn_abbr=sides.get("home"),
+                                away_espn_abbr=sides.get("away"), **fields))
+    return out

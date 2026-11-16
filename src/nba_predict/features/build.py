@@ -25,7 +25,7 @@ import pandas as pd
 from nba_predict.analysis.enrich import closing_lines, load_enriched, source_fingerprint
 from nba_predict.analysis.filters import FilterSpec, apply_filter
 from nba_predict.analysis.metrics import aggregate
-from nba_predict.config import DEFAULT_WINDOWS
+from nba_predict.config import DEFAULT_WINDOWS, get_settings, model_scope
 from nba_predict.ingest import season_for_date
 from nba_predict.models.elo import EloParams, run_elo
 from nba_predict.odds_math import american_to_prob, devig_two_way
@@ -160,13 +160,14 @@ def _market(conn: sqlite3.Connection) -> pd.DataFrame:
     return m
 
 
-def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataFrame:
+def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS, *, all_seasons: bool = False) -> pd.DataFrame:
     windows = tuple(int(w) for w in windows)
-    e = load_enriched(conn)
-    fp = features_fingerprint(conn, windows)  # after enriched is fresh; before reading games
+    e = model_scope(load_enriched(conn), all_seasons=all_seasons)
+    fp = features_fingerprint(conn, windows, all_seasons=all_seasons)  # after enriched is fresh; before reading games
     games = pd.read_sql_query(
         "select game_id, season, season_type, game_date, status, home_team_id, away_team_id, "
         "home_pts, away_pts from games", conn)
+    games = model_scope(games, all_seasons=all_seasons)
     games["_date"] = pd.to_datetime(games.game_date)
     comp = _components(e)
     scopes = {"all": comp, "home": comp[comp.is_home == 1], "away": comp[comp.is_home == 0]}
@@ -188,7 +189,7 @@ def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd
         for w in [f"l{n}" for n in windows] + ["szn"]:
             for mkey in METRICS + ["adjnet"]:
                 diffs[f"d_{scope}_{w}_{mkey}"] = out[f"h_{scope}_{w}_{mkey}"] - out[f"a_{scope}_{w}_{mkey}"]
-    elo = run_elo(games, EloParams())[["game_id", "h_elo", "a_elo", "elo_prob", "elo_margin"]].set_index("game_id")
+    elo = run_elo(games, EloParams(), all_seasons=all_seasons)[["game_id", "h_elo", "a_elo", "elo_prob", "elo_margin"]].set_index("game_id")
     out = pd.concat([out, pd.DataFrame(diffs, index=out.index)], axis=1).join(_market(conn)).join(elo).copy()
 
     final = out.status == "final"
@@ -206,7 +207,7 @@ def build_feature_table(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd
     return out
 
 
-def features_fingerprint(conn: sqlite3.Connection, windows) -> str:
+def features_fingerprint(conn: sqlite3.Connection, windows, *, all_seasons: bool = False) -> str:
     """Signature of what ``game_features`` derives from: the enriched sources, every game row
     (ids, dates, teams, status, scores — so new/rescheduled/postponed/finished games count)
     and the windows."""
@@ -216,23 +217,24 @@ def features_fingerprint(conn: sqlite3.Connection, windows) -> str:
             "season, season_type from games order by game_id"):
         h.update(repr(tuple(r)).encode())
     return json.dumps([source_fingerprint(conn), h.hexdigest(), [int(w) for w in windows],
-                       EloParams().model_dump()])  # Elo columns change with the Elo params
+                       EloParams().model_dump(), "all" if all_seasons else get_settings().model_seasons])  # Elo columns change with the Elo params
 
 
-def load_features(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS) -> pd.DataFrame:
+def load_features(conn: sqlite3.Connection, windows=DEFAULT_WINDOWS, *, all_seasons: bool = False) -> pd.DataFrame:
     """``game_features`` if built from the current sources with these windows, else rebuild
     (which also rebuilds a stale ``team_games_enriched``)."""
     row = conn.execute("select fingerprint from derived_meta where name = 'game_features'").fetchone()
     exists = conn.execute(
         "select 1 from sqlite_master where type = 'table' and name = 'game_features'").fetchone()
-    if exists and row and row[0] == features_fingerprint(conn, windows):
+    if exists and row and row[0] == features_fingerprint(conn, windows, all_seasons=all_seasons):
         return pd.read_sql_query("select * from game_features", conn)
-    return build_feature_table(conn, windows)
+    return build_feature_table(conn, windows, **({"all_seasons": True} if all_seasons else {}))
 
 
 def team_profile_games(enriched: pd.DataFrame, team_abbr: str, as_of: dt.date, n: int | None,
                        venue: str = "all", spec: FilterSpec | None = None) -> pd.DataFrame:
     """Exact input rows for a profile, shared with the dashboard's input audit table."""
+    enriched = model_scope(enriched)
     team = by_abbr(team_abbr)
     g = enriched[(enriched.team_id == team.nba_id) & (enriched.game_date < as_of.isoformat())]
     if venue != "all":

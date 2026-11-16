@@ -30,10 +30,10 @@ def test_backtest_walk_forward_no_future(fixture_db, feats, monkeypatch):
     monkeypatch.setattr(ml_mod.MLModel, "predict", predict)
     backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=50)
     fits = [d for k, d in seen if k == "fit"]
-    assert len(fits) == 2  # Oct and Nov 2025
-    # after each fit: an in-sample predict (sigma from training residuals), then the test month
+    assert len(fits) == 1  # Default: one frozen prior-season fit.
+    # One frozen fit predicts the entire test season.
     test_preds = [d for k, d in seen if k == "pred" and d >= "2025-10-01"]
-    assert [p[:7] for p in test_preds] == ["2025-10", "2025-11"]
+    assert [p[:7] for p in test_preds] == ["2025-10"]
     for f, p in zip(fits, test_preds):
         assert f < f"{p[:7]}-01"  # every training game is before the scored month
 

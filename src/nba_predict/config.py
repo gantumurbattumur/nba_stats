@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     windows: tuple[int, ...] = DEFAULT_WINDOWS
     edge_threshold: float = 0.03
     current_season: str = "2026-27"
-    train_seasons: tuple[str, ...] = ("2023-24", "2024-25", "2025-26")
+    model_seasons: tuple[str, ...] = ("2025-26", "2026-27")
+    train_seasons: tuple[str, ...] = ("2025-26",)
     nba_delay_s: float = 0.6
     espn_delay_s: float = 1.0
     odds_api_key: str | None = Field(
@@ -53,3 +54,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def model_scope(frame, *, all_seasons: bool = False):
+    """Restrict model inputs; season-less numerical arrays remain useful for formula checks."""
+    if all_seasons or "season" not in frame:
+        return frame
+    return frame[frame.season.isin(get_settings().model_seasons)].copy()
