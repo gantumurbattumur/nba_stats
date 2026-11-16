@@ -248,3 +248,28 @@ def test_no_betting_vocabulary_in_metrics_or_columns(fixture_db):
     assert not banned.findall(SCHEMA)
     out = backtest.run(fixture_db, test_seasons=("2025-26",), n_boot=10)
     assert not [m for m in set(out.metric) if banned.search(m.replace("_", " "))]
+
+
+def test_migration_adds_phase3_columns_to_old_db(tmp_path):
+    import sqlite3
+    from nba_predict.db import connect, init_schema
+
+    p = tmp_path / "old.db"
+    raw = sqlite3.connect(p)
+    raw.executescript("""
+        create table games (game_id text primary key, season text, game_date text, home_team_id int,
+            away_team_id int, home_pts int, away_pts int, status text, espn_event_id text);
+        insert into games values ('0042500101','2025-26','2026-04-20',1,2,100,90,'final',null);
+        create table predictions (id integer primary key autoincrement, game_id text, model text,
+            created_at text, home_win_prob real, pred_margin real, pred_total real, params_json text,
+            unique (game_id, model));
+        create table backtest_results (run_at text, model text, season text, metric text, value real);
+        insert into backtest_results values ('t','window','2025-26','log_loss',0.6);
+    """)
+    raw.commit(); raw.close()
+    c = connect(p); init_schema(c); init_schema(c)  # idempotent
+    g = dict(c.execute("select season_type, espn_core_checked, start_time_utc from games").fetchone())
+    assert g == {"season_type": "playoffs", "espn_core_checked": 0, "start_time_utc": None}
+    assert tuple(c.execute("select segment, role from backtest_results").fetchone()) == ("all", "test")
+    assert "made_after_tip" in {r[1] for r in c.execute("pragma table_info(predictions)")}
+    assert backtest.best_model(c) == "window"
