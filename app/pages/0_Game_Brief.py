@@ -18,6 +18,7 @@ from nba_predict.analysis.trends import RULE, lean, team_cover_trends  # noqa: E
 from nba_predict.config import get_settings, model_scope  # noqa: E402
 from nba_predict.odds_math import american_to_prob, devig_two_way  # noqa: E402
 from nba_predict.teams import by_nba_id  # noqa: E402
+from nba_predict.data.book_odds import book_table  # noqa: E402
 
 st.set_page_config(page_title="Game Brief", layout="wide")
 header("Game Brief", "Compare the line, the model and each team's recent record. Make your own assessment.")
@@ -83,6 +84,16 @@ c1.metric(f"{h.abbr} spread", number(line.get("home_spread"), "+.1f", "No line y
           help="Negative means the home team is favoured. A push means the final margin exactly matches the spread.")
 c2.metric("Total points line", number(line.get("total"), missing="No line yet"))
 c3.metric("Moneyline", moneyline(line, h.abbr, a.abbr), help="Prices for each team to win outright.")
+bc = rw_conn()
+try:
+    book_lines = book_table(bc, gid)
+finally:
+    bc.close()
+if not book_lines.empty:
+    st.caption("Informational book lines · best available values are highlighted per market.")
+    view = book_lines[["book", "home_spread", "total", "home_ml", "away_ml"]].copy()
+    view.columns = ["Book", f"{h.abbr} spread", "Total", f"{h.abbr} ML", f"{a.abbr} ML"]
+    st.dataframe(view, hide_index=True, width="stretch")
 if line:
     source = {"espn": "ESPN", "oddsapi": "The Odds API"}.get(line.get("source"), "Unknown source")
     st.caption(f"{source} · {line['line_kind'].title()} line · Provider: {line.get('book') or 'stored closing summary'}")

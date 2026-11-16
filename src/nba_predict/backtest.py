@@ -26,12 +26,13 @@ from nba_predict.config import get_settings
 from nba_predict.features.build import load_features
 from nba_predict.flags import evaluate_markets, market_view, pick_flags, settle
 from nba_predict.models import ml as ml_mod
+from nba_predict.models.totals import TotalsModel
 from nba_predict.models import window_rating as wr
 from nba_predict.models.elo import EloParams
 from nba_predict.odds_math import unit_return
 
 log = logging.getLogger(__name__)
-CORE_MODELS = ("home_always", "elo", "window", "ml")
+CORE_MODELS = ("home_always", "elo", "window", "ml", "totals")
 PREDICTABLE = ("elo", "window", "ml")  # what predict_date produces; best_model picks among these
 EARLY_GAMES = 15  # segment 'early' = either team has fewer season games than this
 
@@ -109,6 +110,12 @@ def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_col
         extra = {"hca": params.hca, "effective_hca": effective_hca(train, params),
                  "split_weight": params.split_weight, "elo_prior_games": params.elo_prior_games}
         return wr.predict_rows(test, params), params.sigma, params.sigma_total, extra
+    if name == "totals":
+        model = TotalsModel().fit(train, all_seasons=all_seasons)
+        # This model is evaluated for total error and over direction only; win fields are
+        # carried as NaN so they never enter moneyline or flag comparisons.
+        out = model.predict(test)
+        return out.assign(home_win_prob=np.nan, pred_margin=np.nan), float("nan"), model.sigma_total, extra
     cols = feature_cols if name == "ml" else [c for c in feature_cols if c not in custom_cols]
     m = ml_mod.MLModel(cols).fit(train, **scope_args)  # C/alpha tuned on forward date folds inside ``train``
     extra = {"C": m.C, "alpha": m.alpha, "alpha_total": m.alpha_total}
@@ -251,7 +258,7 @@ def run(conn: sqlite3.Connection, test_seasons=None, refit: str = "monthly",
                 pred, sig, sig_t, extra = _fit_predict(m, train, test, feature_cols, custom, all_seasons=all_seasons)
                 preds[m].append(pred.assign(sigma=sig, sigma_total=sig_t))
                 extras[m].append(extra)
-        truth = sf[["game_id", "home_win", "margin", "total", "m_home_novig", "m_home_spread",
+        truth = sf[["game_id", "home_win", "margin", "total", "m_home_novig", "m_home_spread", "m_total",
                     "h_gp_szn", "a_gp_szn"]].merge(games, on="game_id")
         for seg, mask in _segments(truth):
             if mask.any():
@@ -267,7 +274,22 @@ def run(conn: sqlite3.Connection, test_seasons=None, refit: str = "monthly",
                 if not mask.any():
                     continue
                 sink: list | None = [] if seg == "all" else None
-                met = _block(d[mask], conn, s.edge_threshold, mv_cache, rng, n_boot, sink)
+                if m == "totals":
+                    z = d[mask][d[mask].pred_total.notna() & d[mask].total.notna()]
+                    err = (z.total - z.pred_total).abs().to_numpy()
+                    met = {"n": len(z), "total_mae": float(err.mean()) if len(err) else float("nan")}
+                    met["total_mae_ci_lo"], met["total_mae_ci_hi"] = _boot_ci(err, rng, n_boot)
+                    lined = z[z.m_total.notna()]
+                    if len(lined):
+                        from scipy.stats import norm
+                        p_over = np.clip(norm.cdf((lined.pred_total - lined.m_total) / max(sig_t, 1.0)), 1e-15, 1 - 1e-15)
+                        y_over = (lined.total > lined.m_total).to_numpy(dtype=float)
+                        ll = _ll_per_game(p_over, y_over)
+                        met["over_log_loss"] = float(ll.mean())
+                        met["over_log_loss_ci_lo"], met["over_log_loss_ci_hi"] = _boot_ci(ll, rng, n_boot)
+                        met["over_hit_rate"] = float(((lined.pred_total > lined.m_total).to_numpy() == y_over).mean())
+                else:
+                    met = _block(d[mask], conn, s.edge_threshold, mv_cache, rng, n_boot, sink)
                 flag_rows += [dict(model=m, season=season, role=role, game_date=gdate[x["game_id"]], **x)
                               for x in (sink or [])]
                 if seg == "all":

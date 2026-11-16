@@ -202,3 +202,20 @@ costs **3 credits per nonempty pull**. One morning pull plus one closing pull is
 180 credits over 30 days, or 186 over 31. At 3 credits each, 500 credits allows 166 such pulls.
 Repeated `nba daily` calls also pull odds. Check actual usage in `api_usage`; empty responses and
 provider billing rules can affect the charge. Plan details were checked November 15, 2026.
+
+## Models and sources
+
+The primary Game Brief estimates use the configured last-season scope (2025–26 and 2026–27).
+The window, Elo and curated-feature logistic/ridge models are available in the existing walk-forward
+analysis. A dedicated totals estimator reports projected points and can compare its direction with
+an observed total line. Experimental XGBoost and small scikit-learn neural-network modules expose
+`last_season` and `long_history` scopes; long-history output is a separate second opinion (2018–19
+onward) and must not select the preferred model or affect analysis flags. The optional package and
+backtest integration are pending where noted in the implementation report.
+
+Per-book lines use the optional `sbr` source identifier and persist normalized records by book in
+`odds_snapshots`. The public Sportsbook Review pages have no stable documented feed; this adapter
+accepts normalized records and does not scrape the site. Any future page reader is unofficial and
+may break or conflict with site terms. ESPN and The Odds API remain the default line sources.
+This project is inspired by public ideas about comparing several model families and presenting
+book-specific lines; it contains independently written code.

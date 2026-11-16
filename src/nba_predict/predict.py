@@ -16,6 +16,7 @@ from nba_predict.db import upsert
 from nba_predict.features.build import load_features
 from nba_predict.models import ml as ml_mod
 from nba_predict.models import window_rating as wr
+from nba_predict.models.totals import TotalsModel
 
 
 def _clean(v):
@@ -72,6 +73,12 @@ def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window
             pred = model.predict(target)
             params = {"sigma": model.sigma, "sigma_total": model.sigma_total, "C": model.C,
                       "alpha": model.alpha, "alpha_total": model.alpha_total, "features": cols}
+        elif m == "totals":
+            model = TotalsModel().fit(train, all_seasons=all_seasons)
+            pred = model.predict(target)
+            pred["home_win_prob"] = np.nan
+            pred["pred_margin"] = np.nan
+            params = {"sigma_total": model.sigma_total, "features": model.cols}
         else:
             raise ValueError(f"unknown model {m!r}")
         pred = pred.assign(model=m)
