@@ -41,3 +41,25 @@
 - Models never touch pre-2025-26 games (assert in a smoke script and report the check).
 - A user can open Game Brief, pick a game, and read spread + total + ML evidence in under a minute without SQL.
 - Results Review answers "model predicted X vs line Y, final Z; covered? over/under?" and "team A covered N of last 5".
+
+---
+
+# Addendum: ideas from kyleskom/NBA-Machine-Learning-Sports-Betting (user decisions, 2026-11-15)
+
+**License:** the repo has no license (all rights reserved). Decision: **learn from the ideas, write our own code**. Do NOT copy or paste its source, notebooks, models, data or screenshots, and do not fork it. Codex must not open its code; the feature list below (from its public README) is the whole spec. Describe sources in our README as "inspired by" only.
+
+**Scope the user picked:** XGBoost + neural-net models, a dedicated over/under (totals) model, sportsbook odds from specific books, and layout ideas for the Game Brief. **Excluded:** Kelly, stake sizing, expected-value payout maths, bankroll. Keep model-vs-market probability difference only.
+
+**Training data (user decision):** the **main** win probability on Game Brief stays last-season-only. Longer-history models appear only as a clearly labelled **"Second opinion (long history, 2018-19 onward)"**, never mixed into the lean label, `best_model`, or the flag log. Long history uses seasons already in the DB (2023-24 onward) plus an optional `nba ingest --season` backfill of earlier seasons; do not use seasons before 2018-19.
+
+## Tasks (after the main game-workflow tasks 5-7 are done)
+8. **Over/under model.** `models/totals.py`: predicts game total and P(over) from our features (last-season-only, same walk-forward fit as the window/ML models). Feed Game Brief total lean. Add to `nba backtest` (log loss + total MAE + over-hit rate vs closing total).
+9. **XGBoost and small neural net.** `models/xgb_model.py`, `models/nn_model.py` (use `xgboost` and scikit-learn `MLPClassifier`; no TensorFlow) for moneyline win prob and totals. Two variants each: `last_season` (main, comparable) and `long_history` (second opinion). Same curated feature set as `models/ml.py`, tuned inside time-ordered folds, out-of-fold calibration (sigmoid). Add to backtest with CIs; report whether they beat `window`/`elo`/market on 2026-27 — if not, say so. Add `xgboost` via `uv add`.
+10. **Per-book odds.** `data/book_odds.py`: optional source "sbr" (Sportsbook Review public odds pages) for FanDuel, DraftKings, BetMGM, Caesars, etc., stored in `odds_snapshots` (`source='sbr'`, `book=<name>`). OFF by default (`--source sbr` / `ODDS_SOURCES` setting), 1 req/s, cache, clear message if the page layout changed. Note in README: unofficial source, may break or violate site terms; ESPN and The Odds API remain the defaults. Game Brief shows a per-book line table when present (spread, total, ML per book, best line highlighted) — informational only.
+11. **Game Brief polish from their layout idea.** One compact card per game (teams, tip time, each book's ML, model win %, total lean); a sidebar toggle for models shown (window / elo / ml / xgb / nn / second opinion). No Kelly/EV columns.
+12. **Report + README.** README section "Models and sources" (what each model is, which are last-season vs long-history, per-book odds caveats). `docs/reports/kyleskom-ideas-codex.md` with what was built, backtest numbers for every new model (verbatim), and `## Next`.
+
+## Acceptance
+- No file contains code copied from kyleskom's repo; no Kelly/EV/bankroll/stake wording anywhere (grep).
+- New models appear in `nba backtest` with CI; second-opinion models are visibly separate and never affect `best_model` or flags.
+- `uv run pytest -q` stays green; no new test files unless a new module has none (then one small file per module is allowed).
