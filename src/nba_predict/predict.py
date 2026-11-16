@@ -49,13 +49,11 @@ def predict_date(conn: sqlite3.Connection, date: dt.date, models=("elo", "window
             pred = wr.predict_rows(target, p)
             params = {**p.model_dump(), "effective_hca": effective_hca(train, p)}
         elif m == "ml":
-            cols = ml_mod.default_feature_cols(f, custom_cols=custom)
-            model = ml_mod.MLModel(cols).fit(train)
+            cols = ml_mod.model_feature_cols(f, custom_cols=custom)
+            model = ml_mod.MLModel(cols).fit(train)  # tuned C/alpha, out-of-fold sigmas
             pred = model.predict(target)
-            fitted = model.predict(train)
-            params = {"sigma": _rms(train.margin.to_numpy() - fitted.pred_margin.to_numpy()),
-                      "sigma_total": _rms(train.total.to_numpy() - fitted.pred_total.to_numpy()),
-                      "C": model.C, "alpha": model.alpha, "features": cols}
+            params = {"sigma": model.sigma, "sigma_total": model.sigma_total, "C": model.C,
+                      "alpha": model.alpha, "alpha_total": model.alpha_total, "features": cols}
         else:
             raise ValueError(f"unknown model {m!r}")
         pred = pred.assign(model=m)

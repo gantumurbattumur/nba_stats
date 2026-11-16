@@ -109,10 +109,9 @@ def _fit_predict(name: str, train: pd.DataFrame, test: pd.DataFrame, feature_col
                  "split_weight": params.split_weight, "elo_prior_games": params.elo_prior_games}
         return wr.predict_rows(test, params), params.sigma, params.sigma_total, extra
     cols = feature_cols if name == "ml" else [c for c in feature_cols if c not in custom_cols]
-    m = ml_mod.MLModel(cols).fit(train)
-    fitted = m.predict(train)
-    return (m.predict(test), _rms(train.margin.to_numpy() - fitted.pred_margin.to_numpy()),
-            _rms(train.total.to_numpy() - fitted.pred_total.to_numpy()), extra)
+    m = ml_mod.MLModel(cols).fit(train)  # C/alpha tuned on forward date folds inside ``train``
+    extra = {"C": m.C, "alpha": m.alpha, "alpha_total": m.alpha_total}
+    return m.predict(test), m.sigma, m.sigma_total, extra  # out-of-fold sigmas
 
 
 def _flag_eval(conn, rows: pd.DataFrame, threshold: float, mv_cache: dict) -> dict[str, float]:
@@ -210,7 +209,7 @@ def run(conn: sqlite3.Connection, test_seasons=("2024-25", "2025-26"), refit: st
     custom = _custom_model_cols(conn)
     if custom:
         f = with_custom(f, _db_path(conn), only_model=True)
-    feature_cols = ml_mod.default_feature_cols(f, custom_cols=custom)
+    feature_cols = ml_mod.model_feature_cols(f, custom_cols=custom)
     games = pd.read_sql_query("select game_id, home_pts, away_pts from games", conn)
     final = f[(f.status == "final") & f.home_win.notna()]
     trainable = final[ml_mod.eligible(final)]  # training only; every final test game is scored
